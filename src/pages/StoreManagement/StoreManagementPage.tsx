@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { storeService } from '@/api/services/storeService';
 import { Store, StoreCreateRequest, StoreUpdateRequest } from '@/api/types';
+import { useToast } from '@/contexts/ToastContext';
 
 const StoreManagementPage = () => {
+  const { showToast } = useToast();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,7 +91,7 @@ const StoreManagementPage = () => {
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          alert('Store updated successfully!');
+          showToast('Store updated successfully!', 'success');
         }
       } else {
         // Create new store
@@ -97,7 +99,7 @@ const StoreManagementPage = () => {
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          alert('Store created successfully!');
+          showToast('Store created successfully!', 'success');
         }
       }
     } catch (err: any) {
@@ -118,10 +120,10 @@ const StoreManagementPage = () => {
         const response = await storeService.toggleStoreStatus(store.store_id, !store.is_active);
         if (response.success) {
           fetchStores();
-          alert(`Store ${action}d successfully!`);
+          showToast(`Store ${action}d successfully!`, 'success');
         }
       } catch (err: any) {
-        alert(err.response?.data?.message || `Failed to ${action} store`);
+        showToast(err.response?.data?.message || `Failed to ${action} store`, 'error');
         console.error(`Error ${action}ing store:`, err);
       }
     }
@@ -198,13 +200,13 @@ const StoreManagementPage = () => {
 
       {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="flex flex-wrap gap-4">
           <input
             type="text"
             placeholder="Search by store name or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 md:col-span-2"
+            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[300px]"
           />
           <select
             value={filterStatus}
@@ -291,19 +293,31 @@ const StoreManagementPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <button
                       onClick={() => handleEdit(store)}
-                      className="text-blue-600 hover:text-blue-900"
+                      className="text-blue-600 hover:text-blue-900 p-1"
+                      title="Edit"
                     >
-                      Edit
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
                     </button>
                     <button
                       onClick={() => handleToggleStatus(store)}
-                      className={`${
+                      className={`p-1 ${
                         store.is_active
                           ? 'text-red-600 hover:text-red-900'
                           : 'text-green-600 hover:text-green-900'
                       }`}
+                      title={store.is_active ? 'Deactivate' : 'Activate'}
                     >
-                      {store.is_active ? 'Deactivate' : 'Activate'}
+                      {store.is_active ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      )}
                     </button>
                   </td>
                 </tr>
@@ -315,8 +329,15 @@ const StoreManagementPage = () => {
 
       {/* Modal for Create/Edit Store */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <div 
+          className="fixed inset-0 flex items-center justify-center z-[9999]"
+          onClick={() => setShowModal(false)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md border border-gray-200 relative"
+            onClick={(e) => e.stopPropagation()}
+            style={{ boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.3)' }}
+          >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
               {editingStore ? 'Edit Store' : 'Create New Store'}
             </h2>
