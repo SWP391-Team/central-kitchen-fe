@@ -198,13 +198,13 @@ const StoreManagementPage = () => {
 
       {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="flex flex-wrap gap-4">
           <input
             type="text"
             placeholder="Search by store name or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 md:col-span-2"
+            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[300px]"
           />
           <select
             value={filterStatus}
