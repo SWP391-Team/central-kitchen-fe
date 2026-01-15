@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
 import { User, UserCreateRequest, UserUpdateRequest } from '@/api/types';
-import Navbar from '@/components/Navbar';
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -126,9 +125,7 @@ const UserManagementPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <Navbar />
-      <div className="container mx-auto px-4 py-8">
+    <div className="space-y-6">
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
@@ -417,7 +414,6 @@ const UserManagementPage = () => {
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 };

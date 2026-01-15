@@ -7,6 +7,8 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   isAdmin: boolean
+  isCentralStaff: boolean
+  isStoreStaff: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,9 +36,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const isAuthenticated = !!user
   const isAdmin = user?.role_id === 1
+  const isCentralStaff = user?.role_id === 2
+  const isStoreStaff = user?.role_id === 3
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated, isAdmin }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated, isAdmin, isCentralStaff, isStoreStaff }}>
       {children}
     </AuthContext.Provider>
   )

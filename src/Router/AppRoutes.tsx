@@ -1,18 +1,30 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import HomePage from '@/pages/Authentication/HomePage'
 import LoginPage from '@/pages/Authentication/LoginPage'
+import MainLayout from '@/layouts/MainLayout'
+import DashboardPage from '@/pages/Dashboard/DashboardPage'
+import InventoryPage from '@/pages/Inventory/InventoryPage'
+import SupplyOrderPage from '@/pages/SupplyOrder/SupplyOrderPage'
+import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
+import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
+import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Protected route wrapper
-const ProtectedRoute = ({ children, requireAdmin = false }: { children: React.ReactNode, requireAdmin?: boolean }) => {
-  const { isAuthenticated, isAdmin } = useAuth()
+// Protected route wrapper with role-based access
+const ProtectedRoute = ({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode, 
+  allowedRoles?: number[] 
+}) => {
+  const { isAuthenticated, user } = useAuth()
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
   
-  if (requireAdmin && !isAdmin) {
+  if (allowedRoles && user && !allowedRoles.includes(user.role_id)) {
     return <Navigate to="/" replace />
   }
   
@@ -23,22 +35,48 @@ const AppRouter = () => {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route 
-        path="/" 
-        element={
-          <ProtectedRoute>
-            <HomePage />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/users" 
-        element={
-          <ProtectedRoute requireAdmin={true}>
-            <UserManagementPage />
-          </ProtectedRoute>
-        } 
-      />
+      
+      {/* All protected routes use MainLayout with Sidebar */}
+      <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+        {/* Dashboard - accessible by all authenticated users */}
+        <Route path="/" element={<DashboardPage />} />
+        
+        {/* Inventory - Admin, Central_Staff, Store_Staff */}
+        <Route 
+          path="/inventory" 
+          element={<ProtectedRoute allowedRoles={[1, 2, 3]}><InventoryPage /></ProtectedRoute>} 
+        />
+        
+        {/* Supply Order - Admin, Central_Staff, Store_Staff */}
+        <Route 
+          path="/supply-order" 
+          element={<ProtectedRoute allowedRoles={[1, 2, 3]}><SupplyOrderPage /></ProtectedRoute>} 
+        />
+        
+        {/* Customer Order - Admin, Store_Staff */}
+        <Route 
+          path="/customer-order" 
+          element={<ProtectedRoute allowedRoles={[1, 3]}><CustomerOrderPage /></ProtectedRoute>} 
+        />
+        
+        {/* User Management - Admin only */}
+        <Route 
+          path="/users" 
+          element={<ProtectedRoute allowedRoles={[1]}><UserManagementPage /></ProtectedRoute>} 
+        />
+        
+        {/* Store Management - Admin only */}
+        <Route 
+          path="/stores" 
+          element={<ProtectedRoute allowedRoles={[1]}><StoreManagementPage /></ProtectedRoute>} 
+        />
+        
+        {/* Audit Log - Admin only */}
+        <Route 
+          path="/audit-log" 
+          element={<ProtectedRoute allowedRoles={[1]}><AuditLogPage /></ProtectedRoute>} 
+        />
+      </Route>
     </Routes>
   )
 }
