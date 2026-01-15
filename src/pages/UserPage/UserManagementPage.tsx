@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
-import { User, UserCreateRequest, UserUpdateRequest } from '@/api/types';
+import { storeService } from '@/api/services/storeService';
+import { User, UserCreateRequest, UserUpdateRequest, Store } from '@/api/types';
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState<number | 'all'>('all');
+  const [filterStore, setFilterStore] = useState<number | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'store_id'>('user_id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
     username: '',
     password: '',
@@ -18,6 +25,7 @@ const UserManagementPage = () => {
 
   useEffect(() => {
     loadUsers();
+    loadStores();
   }, []);
 
   const loadUsers = async () => {
@@ -30,6 +38,17 @@ const UserManagementPage = () => {
       setError(err.response?.data?.message || 'Failed to load users');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStores = async () => {
+    try {
+      const response = await storeService.getStores({ is_active: true });
+      if (response.success) {
+        setStores(response.data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load stores:', err);
     }
   };
 
@@ -103,15 +122,75 @@ const UserManagementPage = () => {
     }
   };
 
+  const handleToggleStatus = async (user: User) => {
+    const action = user.is_active ? 'deactivate' : 'activate';
+    if (!confirm(`Are you sure you want to ${action} user "${user.username}"?`)) return;
+
+    try {
+      await userService.updateUser(user.user_id, { is_active: !user.is_active });
+      loadUsers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || `Failed to ${action} user`);
+    }
+  };
+
   const getRoleName = (roleId: number) => {
     const roles: Record<number, string> = {
       1: 'Admin',
-      2: 'Manager',
-      3: 'Staff',
-      4: 'Store Manager',
+      2: 'Central Staff',
+      3: 'Store Staff',
     };
     return roles[roleId] || 'Unknown';
   };
+
+  const getStoreName = (storeId: number | null) => {
+    if (!storeId) return '-';
+    const store = stores.find(s => s.store_id === storeId);
+    return store ? store.store_name : `Store #${storeId}`;
+  };
+
+  const getStoreAddress = (storeId: number | null) => {
+    if (!storeId) return '-';
+    const store = stores.find(s => s.store_id === storeId);
+    return store ? store.store_address : '-';
+  };
+
+  // Filter and sort users
+  const filteredAndSortedUsers = users
+    .filter(user => {
+      const matchesSearch = searchTerm === '' || 
+        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getRoleName(user.role_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getStoreName(user.store_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getStoreAddress(user.store_id).toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesRole = filterRole === 'all' || user.role_id === filterRole;
+      const matchesStore = filterStore === 'all' || user.store_id === filterStore;
+      
+      return matchesSearch && matchesRole && matchesStore;
+    })
+    .sort((a, b) => {
+      let compareValue = 0;
+      
+      switch (sortBy) {
+        case 'user_id':
+          compareValue = a.user_id - b.user_id;
+          break;
+        case 'username':
+          compareValue = a.username.localeCompare(b.username);
+          break;
+        case 'role_id':
+          compareValue = a.role_id - b.role_id;
+          break;
+        case 'store_id':
+          const storeNameA = getStoreName(a.store_id);
+          const storeNameB = getStoreName(b.store_id);
+          compareValue = storeNameA.localeCompare(storeNameB);
+          break;
+      }
+      
+      return sortOrder === 'asc' ? compareValue : -compareValue;
+    });
 
   if (loading) {
     return (
@@ -183,8 +262,8 @@ const UserManagementPage = () => {
         <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 transform hover:-translate-y-1 transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm font-medium">Managers</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 2 || u.role_id === 4).length}</p>
+              <p className="text-gray-500 text-sm font-medium">Staff Members</p>
+              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 2 || u.role_id === 3).length}</p>
             </div>
             <div className="text-4xl">💼</div>
           </div>
@@ -194,20 +273,57 @@ const UserManagementPage = () => {
       <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
         {/* Search and Filter Bar */}
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2">
               <input
                 type="text"
-                placeholder="🔍 Search users..."
+                placeholder="🔍 Search by username, role, store name, address..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
               />
             </div>
-            <select className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all">
-              <option>All Roles</option>
-              <option>Admin</option>
-              <option>Manager</option>
-              <option>Staff</option>
+            <select 
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
+            >
+              <option value="all">All Roles</option>
+              <option value={1}>Admin</option>
+              <option value={2}>Central Staff</option>
+              <option value={3}>Store Staff</option>
             </select>
+            <select
+              value={filterStore}
+              onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
+            >
+              <option value="all">All Stores</option>
+              {stores.map(store => (
+                <option key={store.store_id} value={store.store_id}>
+                  {store.store_name}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'user_id' | 'username' | 'role_id' | 'store_id')}
+                className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all flex-1"
+              >
+                <option value="user_id">Sort by ID</option>
+                <option value="username">Sort by Username</option>
+                <option value="role_id">Sort by Role</option>
+                <option value="store_id">Sort by Store</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="px-3 py-2 bg-white rounded-lg hover:bg-gray-100 transition-all font-bold"
+                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+              >
+                {sortOrder === 'asc' ? '↑' : '↓'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -217,15 +333,15 @@ const UserManagementPage = () => {
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store ID</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Created</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
-            </tr>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Name</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Address</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+              </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {users.map((user) => (
+            {filteredAndSortedUsers.map((user) => (
               <tr key={user.user_id} className="hover:bg-indigo-50 transition-colors duration-150">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="font-semibold text-gray-800">#{user.user_id}</span>
@@ -242,28 +358,26 @@ const UserManagementPage = () => {
                   <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${
                     user.role_id === 1 ? 'bg-red-100 text-red-800' :
                     user.role_id === 2 ? 'bg-blue-100 text-blue-800' :
-                    user.role_id === 4 ? 'bg-purple-100 text-purple-800' :
                     'bg-green-100 text-green-800'
                   }`}>
-                    {user.role_id === 1 ? '👑' : user.role_id === 2 ? '💼' : user.role_id === 4 ? '🏪' : '👤'} {getRoleName(user.role_id)}
+                    {user.role_id === 1 ? '👑' : user.role_id === 2 ? '💼' : '👤'} {getRoleName(user.role_id)}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-gray-700">{user.store_id ? `Store #${user.store_id}` : '-'}</span>
+                  <span className="text-gray-700 font-medium">{getStoreName(user.store_id)}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-gray-600 text-sm">{getStoreAddress(user.store_id)}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full ${
-                    user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
+                  <button
+                    onClick={() => handleToggleStatus(user)}
+                    className={`px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full cursor-pointer transition-all ${
+                      user.is_active ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
+                    }`}
+                  >
                     {user.is_active ? '✓ Active' : '✗ Inactive'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                  {new Date(user.created_at).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                  })}
+                  </button>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
@@ -284,7 +398,7 @@ const UserManagementPage = () => {
           </tbody>
         </table>
 
-        {users.length === 0 && (
+        {filteredAndSortedUsers.length === 0 && (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📭</div>
             <p className="text-gray-500 text-lg">No users found</p>
@@ -356,42 +470,31 @@ const UserManagementPage = () => {
                     required
                   >
                     <option value={1}>👑 Admin</option>
-                    <option value={2}>💼 Manager</option>
-                    <option value={3}>👤 Staff</option>
-                    <option value={4}>🏪 Store Manager</option>
+                    <option value={2}>💼 Central Staff</option>
+                    <option value={3}>👤 Store Staff</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
                     <span className="mr-2">🏪</span>
-                    Store ID <span className="text-sm text-gray-500 ml-2">(optional)</span>
+                    Store <span className="text-sm text-gray-500 ml-2">(optional)</span>
                   </label>
-                  <input
-                    type="number"
+                  <select
                     value={formData.store_id || ''}
                     onChange={(e) => setFormData({ 
                       ...formData, 
                       store_id: e.target.value ? parseInt(e.target.value) : null 
                     })}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                    placeholder="Enter store ID"
-                  />
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="ml-3 text-gray-700 font-semibold flex items-center">
-                      <span className="mr-2">✅</span>
-                      Active User
-                    </span>
-                  </label>
+                  >
+                    <option value="">No Store</option>
+                    {stores.map(store => (
+                      <option key={store.store_id} value={store.store_id}>
+                        {store.store_name} ({store.store_address})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">

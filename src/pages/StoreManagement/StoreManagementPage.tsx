@@ -10,6 +10,8 @@ const StoreManagementPage = () => {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [sortBy, setSortBy] = useState<'store_id' | 'store_name' | 'status'>('store_id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   const [formData, setFormData] = useState<StoreCreateRequest>({
     store_name: '',
@@ -125,8 +127,24 @@ const StoreManagementPage = () => {
     }
   };
 
-  // Filter stores based on search and filter
-  const filteredStores = stores;
+  // Filter and sort stores
+  const filteredStores = [...stores].sort((a, b) => {
+    let compareValue = 0;
+    
+    switch (sortBy) {
+      case 'store_id':
+        compareValue = a.store_id - b.store_id;
+        break;
+      case 'store_name':
+        compareValue = a.store_name.localeCompare(b.store_name);
+        break;
+      case 'status':
+        compareValue = (a.is_active === b.is_active) ? 0 : a.is_active ? -1 : 1;
+        break;
+    }
+    
+    return sortOrder === 'asc' ? compareValue : -compareValue;
+  });
 
   // Get statistics
   const totalStores = stores.length;
@@ -180,13 +198,13 @@ const StoreManagementPage = () => {
 
       {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input
             type="text"
             placeholder="Search by store name or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 md:col-span-2"
           />
           <select
             value={filterStatus}
@@ -197,6 +215,24 @@ const StoreManagementPage = () => {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          <div className="flex gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'store_id' | 'store_name' | 'status')}
+              className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1"
+            >
+              <option value="store_id">Sort by ID</option>
+              <option value="store_name">Sort by Name</option>
+              <option value="status">Sort by Status</option>
+            </select>
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
         </div>
       </div>
 
