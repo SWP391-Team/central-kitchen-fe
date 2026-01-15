@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { storeService } from '@/api/services/storeService';
 import { Store, StoreCreateRequest, StoreUpdateRequest } from '@/api/types';
+import { useToast } from '@/contexts/ToastContext';
 
 const StoreManagementPage = () => {
+  const { showToast } = useToast();
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,7 +91,7 @@ const StoreManagementPage = () => {
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          alert('Store updated successfully!');
+          showToast('Store updated successfully!', 'success');
         }
       } else {
         // Create new store
@@ -97,7 +99,7 @@ const StoreManagementPage = () => {
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          alert('Store created successfully!');
+          showToast('Store created successfully!', 'success');
         }
       }
     } catch (err: any) {
@@ -118,10 +120,10 @@ const StoreManagementPage = () => {
         const response = await storeService.toggleStoreStatus(store.store_id, !store.is_active);
         if (response.success) {
           fetchStores();
-          alert(`Store ${action}d successfully!`);
+          showToast(`Store ${action}d successfully!`, 'success');
         }
       } catch (err: any) {
-        alert(err.response?.data?.message || `Failed to ${action} store`);
+        showToast(err.response?.data?.message || `Failed to ${action} store`, 'error');
         console.error(`Error ${action}ing store:`, err);
       }
     }
