@@ -5,6 +5,7 @@ export interface Store {
   store_address: string;
   is_active: boolean;
   created_at: string;
+  updated_at?: Date;
 }
 
 export interface StoreCreateRequest {

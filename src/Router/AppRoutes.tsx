@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from '@/pages/Authentication/LoginPage'
 import MainLayout from '@/layouts/MainLayout'
 import DashboardPage from '@/pages/Dashboard/DashboardPage'
-import InventoryPage from '@/pages/Inventory/InventoryPage'
+import CentralKitchenInventoryPage from '@/pages/Inventory/CentralKitchenInventoryPage'
 import SupplyOrderPage from '@/pages/SupplyOrder/SupplyOrderPage'
 import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
@@ -41,10 +41,10 @@ const AppRouter = () => {
         {/* Dashboard - accessible by all authenticated users */}
         <Route path="/" element={<DashboardPage />} />
         
-        {/* Inventory - Admin, Central_Staff, Store_Staff */}
+        {/* Central Kitchen Inventory - Admin, Central_Staff */}
         <Route 
-          path="/inventory" 
-          element={<ProtectedRoute allowedRoles={[1, 2, 3]}><InventoryPage /></ProtectedRoute>} 
+          path="/inventory/central-kitchen" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
         />
         
         {/* Supply Order - Admin, Central_Staff, Store_Staff */}

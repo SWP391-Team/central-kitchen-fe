@@ -6,6 +6,7 @@ export interface User {
   store_id: number | null;
   is_active: boolean;
   created_at: string;
+  updated_at?: Date;
 }
 
 export interface UserCreateRequest {

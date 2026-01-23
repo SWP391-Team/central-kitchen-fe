@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState } from 'react';
 import {
   HomeIcon,
   CubeIcon,
@@ -9,13 +10,23 @@ import {
   BuildingStorefrontIcon,
   DocumentTextIcon,
   ArrowLeftOnRectangleIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
+
+interface SubMenuItem {
+  name: string;
+  path: string;
+  roles?: number[];
+  storeIds?: number[];
+}
 
 interface MenuItem {
   name: string;
   path: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   roles: number[]; // role_ids that can access this menu item
+  subItems?: SubMenuItem[];
 }
 
 const menuItems: MenuItem[] = [
@@ -30,6 +41,26 @@ const menuItems: MenuItem[] = [
     path: '/inventory',
     icon: CubeIcon,
     roles: [1, 2, 3], // Admin, Central_Staff, Store_Staff
+    subItems: [
+      {
+        name: 'Central Kitchen Inventory',
+        path: '/inventory/central-kitchen',
+        roles: [1], 
+        storeIds: [1], 
+      },
+      {
+        name: 'Store District 1 Inventory',
+        path: '/inventory/store-district-1',
+        roles: [1], // Admin
+        storeIds: [2], // store_id = 2
+      },
+      {
+        name: 'Store District 2 Inventory',
+        path: '/inventory/store-district-2',
+        roles: [1], // Admin
+        storeIds: [3], // store_id = 3
+      },
+    ],
   },
   {
     name: 'Supply Order',
@@ -67,6 +98,7 @@ const Sidebar = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   const handleLogout = () => {
     logout();
@@ -79,6 +111,27 @@ const Sidebar = () => {
   const filteredMenuItems = menuItems.filter((item) =>
     item.roles.includes(user.role_id)
   );
+
+  // Filter sub-items based on user role and store_id
+  const filterSubItems = (subItems?: SubMenuItem[]) => {
+    if (!subItems) return [];
+    
+    return subItems.filter((subItem) => {
+      // Check role access
+      const hasRoleAccess = !subItem.roles || subItem.roles.includes(user.role_id);
+      
+      // Check store_id access
+      const hasStoreAccess = !subItem.storeIds || 
+        (user.store_id !== null && subItem.storeIds.includes(user.store_id));
+      
+      // User has access if they have role access OR store access
+      return hasRoleAccess || hasStoreAccess;
+    });
+  };
+
+  const toggleDropdown = (itemName: string) => {
+    setOpenDropdown(openDropdown === itemName ? null : itemName);
+  };
 
   const getRoleName = (roleId: number) => {
     switch (roleId) {
@@ -125,20 +178,70 @@ const Sidebar = () => {
           {filteredMenuItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
+            const filteredSubItems = filterSubItems(item.subItems);
+            const hasSubItems = filteredSubItems.length > 0;
+            const isDropdownOpen = openDropdown === item.name;
+            const isSubItemActive = filteredSubItems.some(
+              (subItem) => location.pathname === subItem.path
+            );
 
             return (
               <li key={item.path}>
-                <Link
-                  to={item.path}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{item.name}</span>
-                </Link>
+                {hasSubItems ? (
+                  <>
+                    <button
+                      onClick={() => toggleDropdown(item.name)}
+                      className={`flex items-center justify-between w-full px-4 py-3 rounded-lg transition-colors ${
+                        isSubItemActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Icon className="w-5 h-5" />
+                        <span className="text-sm font-medium">{item.name}</span>
+                      </div>
+                      {isDropdownOpen ? (
+                        <ChevronDownIcon className="w-4 h-4" />
+                      ) : (
+                        <ChevronRightIcon className="w-4 h-4" />
+                      )}
+                    </button>
+                    {isDropdownOpen && (
+                      <ul className="mt-1 ml-4 space-y-1">
+                        {filteredSubItems.map((subItem) => {
+                          const isSubActive = location.pathname === subItem.path;
+                          return (
+                            <li key={subItem.path}>
+                              <Link
+                                to={subItem.path}
+                                className={`flex items-center px-4 py-2 rounded-lg transition-colors text-sm ${
+                                  isSubActive
+                                    ? 'bg-blue-500 text-white'
+                                    : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                                }`}
+                              >
+                                {subItem.name}
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </>
+                ) : (
+                  <Link
+                    to={item.path}
+                    className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.name}</span>
+                  </Link>
+                )}
               </li>
             );
           })}
