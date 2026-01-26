@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
 import { storeService } from '@/api/services/storeService';
 import { User, UserCreateRequest, UserUpdateRequest, Store } from '@/api/types';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -21,6 +22,20 @@ const UserManagementPage = () => {
     role_id: 2,
     store_id: null,
     is_active: true,
+  });
+
+  // Confirm dialog states
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: 'danger' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
   });
 
   useEffect(() => {
@@ -111,27 +126,43 @@ const UserManagementPage = () => {
     }
   };
 
-  const handleDelete = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
-    try {
-      await userService.deleteUser(userId);
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete user');
-    }
+  const handleDelete = async (userId: number, username: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete User',
+      message: `Are you sure you want to delete user "${username}"? This action cannot be undone.`,
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          await userService.deleteUser(userId);
+          loadUsers();
+        } catch (err: any) {
+          setError(err.response?.data?.message || 'Failed to delete user');
+        }
+      },
+    });
   };
 
   const handleToggleStatus = async (user: User) => {
     const action = user.is_active ? 'deactivate' : 'activate';
-    if (!confirm(`Are you sure you want to ${action} user "${user.username}"?`)) return;
-
-    try {
-      await userService.updateUser(user.user_id, { is_active: !user.is_active });
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${action} user`);
-    }
+    const actionText = user.is_active ? 'Deactivate' : 'Activate';
+    
+    setConfirmDialog({
+      isOpen: true,
+      title: `${actionText} User`,
+      message: `Are you sure you want to ${action} user "${user.username}"?`,
+      type: 'warning',
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, isOpen: false });
+        try {
+          await userService.updateUser(user.user_id, { is_active: !user.is_active });
+          loadUsers();
+        } catch (err: any) {
+          setError(err.response?.data?.message || `Failed to ${action} user`);
+        }
+      },
+    });
   };
 
   const getRoleName = (roleId: number) => {
@@ -409,8 +440,8 @@ const UserManagementPage = () => {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-slide-up">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4 pointer-events-none">
+          <div className="bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] max-w-md w-full transform transition-all animate-slide-up pointer-events-auto">
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
               <h2 className="text-2xl font-bold flex items-center">
@@ -517,6 +548,16 @@ const UserManagementPage = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+      />
     </div>
   );
 };
