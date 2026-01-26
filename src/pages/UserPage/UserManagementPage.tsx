@@ -11,6 +11,7 @@ const UserManagementPage = () => {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<number | 'all'>('all');
   const [filterStore, setFilterStore] = useState<number | 'all'>('all');
@@ -37,6 +38,15 @@ const UserManagementPage = () => {
     message: '',
     onConfirm: () => {},
   });
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 500); 
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     loadUsers();
@@ -309,8 +319,8 @@ const UserManagementPage = () => {
               <input
                 type="text"
                 placeholder="🔍 Search by username, role, store name, address..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
               />
             </div>
@@ -418,7 +428,7 @@ const UserManagementPage = () => {
                     ✏️ Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(user.user_id)}
+                    onClick={() => handleDelete(user.user_id, user.username)}
                     className="text-red-600 hover:text-red-900 font-semibold hover:underline"
                   >
                     🗑️ Delete
