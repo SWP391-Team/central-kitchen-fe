@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { inventoryService } from '@/api/services/inventoryService';
 import { ProductBatchWithDetails } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 
-const StoreDistrict2InventoryPage = () => {
+const StoreInventoryPage = () => {
+  const { storeId } = useParams<{ storeId: string }>();
+  const navigate = useNavigate();
   const [batches, setBatches] = useState<ProductBatchWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,16 +18,20 @@ const StoreDistrict2InventoryPage = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
 
-  const STORE_DISTRICT_2_ID = 3;
+  const numericStoreId = storeId ? parseInt(storeId) : null;
 
   useEffect(() => {
-    loadInventory();
-  }, []);
+    if (numericStoreId) {
+      loadInventory();
+    }
+  }, [numericStoreId]);
 
   const loadInventory = async () => {
+    if (!numericStoreId) return;
+    
     try {
       setLoading(true);
-      const data = await inventoryService.getInventoryByStore(STORE_DISTRICT_2_ID);
+      const data = await inventoryService.getInventoryByStore(numericStoreId);
       setBatches(data);
       setError('');
     } catch (err: any) {
@@ -136,6 +143,11 @@ const StoreDistrict2InventoryPage = () => {
     }
   };
 
+  const getStoreName = () => {
+    if (numericStoreId === 1) return 'Central Kitchen';
+    return `Store (ID: ${numericStoreId})`;
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -148,9 +160,17 @@ const StoreDistrict2InventoryPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">Store District 2 Inventory</h1>
-          <p className="text-gray-600 mt-1">Product batches received from supply orders</p>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800">{getStoreName()} Inventory</h1>
+            <p className="text-gray-600 mt-1">Product batches in store inventory</p>
+          </div>
         </div>
         <button
           onClick={loadInventory}
@@ -340,4 +360,4 @@ const StoreDistrict2InventoryPage = () => {
   );
 };
 
-export default StoreDistrict2InventoryPage;
+export default StoreInventoryPage;

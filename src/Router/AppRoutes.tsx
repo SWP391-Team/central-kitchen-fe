@@ -3,8 +3,7 @@ import LoginPage from '@/pages/Authentication/LoginPage'
 import MainLayout from '@/layouts/MainLayout'
 import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import CentralKitchenInventoryPage from '@/pages/Inventory/CentralKitchenInventoryPage'
-import StoreDistrict1InventoryPage from '@/pages/Inventory/StoreDistrict1InventoryPage'
-import StoreDistrict2InventoryPage from '@/pages/Inventory/StoreDistrict2InventoryPage'
+import StoreInventoryPage from '@/pages/Inventory/StoreInventoryPage'
 import SupplyOrderStorePage from '@/pages/SupplyOrder/SupplyOrderStorePage'
 import SupplyOrderCentralKitchenPage from '@/pages/SupplyOrder/SupplyOrderCentralKitchenPage'
 import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
@@ -43,22 +42,22 @@ const AppRouter = () => {
         {/* Dashboard - accessible by all authenticated users */}
         <Route path="/" element={<DashboardPage />} />
         
-        {/* Central Kitchen Inventory - Admin, Central_Staff */}
+        {/* Central Kitchen Inventory - Admin, Central_Staff - Use store/1 */}
         <Route 
           path="/inventory/central-kitchen" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
         />
         
-        {/* Store District 1 Inventory - Admin, Store_Staff (store_id = 2) */}
+        {/* Also support direct access via /inventory/store/1 */}
         <Route 
-          path="/inventory/store-district-1" 
-          element={<ProtectedRoute allowedRoles={[1, 3]}><StoreDistrict1InventoryPage /></ProtectedRoute>} 
+          path="/inventory/store/1" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
         />
         
-        {/* Store District 2 Inventory - Admin, Store_Staff (store_id = 3) */}
+        {/* Dynamic Store Inventory - Admin, Store_Staff */}
         <Route 
-          path="/inventory/store-district-2" 
-          element={<ProtectedRoute allowedRoles={[1, 3]}><StoreDistrict2InventoryPage /></ProtectedRoute>} 
+          path="/inventory/store/:storeId" 
+          element={<ProtectedRoute allowedRoles={[1, 3]}><StoreInventoryPage /></ProtectedRoute>} 
         />
         
         {/* Supply Order Store - Admin (read-only), Store_Staff */}

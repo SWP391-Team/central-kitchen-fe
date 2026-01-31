@@ -12,7 +12,7 @@ export const inventoryService = {
   },
 
   getCentralKitchenInventory: async (): Promise<ProductBatchWithDetails[]> => {
-    const response = await api.get<ApiResponse<ProductBatchWithDetails[]>>('/inventory/central-kitchen');
+    const response = await api.get<ApiResponse<ProductBatchWithDetails[]>>('/inventory/store/1');
     return response.data.data;
   },
 

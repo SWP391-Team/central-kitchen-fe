@@ -1,6 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { storeService } from '@/api/services/storeService';
+import { Store } from '@/api/types';
 import {
   HomeIcon,
   CubeIcon,
@@ -44,18 +46,13 @@ const menuItems: MenuItem[] = [
     subItems: [
       {
         name: 'Central Kitchen Inventory',
-        path: '/inventory/central-kitchen',
+        path: '/inventory/store/1',
         roles: [1, 2], 
       },
       {
-        name: 'Store District 1 Inventory',
-        path: '/inventory/store-district-1',
-        roles: [1, 3], 
-      },
-      {
-        name: 'Store District 2 Inventory',
-        path: '/inventory/store-district-2',
-        roles: [1, 3], 
+        name: 'My Store Inventory',
+        path: '/inventory/store/:storeId', 
+        roles: [3], 
       },
     ],
   },
@@ -108,6 +105,22 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
+
+  useEffect(() => {
+    if (user?.role_id === 1) {
+      loadStores();
+    }
+  }, [user]);
+
+  const loadStores = async () => {
+    try {
+      const response = await storeService.getStores({ is_active: true });
+      setStores(response.data || []);
+    } catch (error) {
+      console.error('Failed to load stores:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -123,14 +136,34 @@ const Sidebar = () => {
   const filterSubItems = (subItems?: SubMenuItem[]) => {
     if (!subItems) return [];
     
-    return subItems.filter((subItem) => {
+    const filtered = subItems.map((subItem) => {
+      let path = subItem.path;
+      if (path.includes(':storeId') && user.store_id) {
+        path = path.replace(':storeId', user.store_id.toString());
+      }
+      
+      return {
+        ...subItem,
+        path
+      };
+    }).filter((subItem) => {
       const hasRoleAccess = !subItem.roles || subItem.roles.includes(user.role_id);
-      
-      const hasStoreAccess = !subItem.storeIds || 
-        (user.store_id !== null && subItem.storeIds.includes(user.store_id));
-      
-      return hasRoleAccess || hasStoreAccess;
+      return hasRoleAccess;
     });
+
+    if (user.role_id === 1 && openDropdown === 'Inventory') {
+      const filteredWithoutMyStore = filtered.filter(item => !item.path.includes('/inventory/store/'));
+      
+      const storeItems: SubMenuItem[] = stores.map(store => ({
+        name: store.store_name,
+        path: `/inventory/store/${store.store_id}`,
+        roles: [1], 
+      }));
+
+      return [...filteredWithoutMyStore, ...storeItems];
+    }
+
+    return filtered;
   };
 
   const toggleDropdown = (itemName: string) => {
