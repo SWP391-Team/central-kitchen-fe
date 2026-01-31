@@ -21,7 +21,6 @@ const StoreManagementPage = () => {
     is_active: true,
   });
 
-  // Fetch stores
   const fetchStores = async () => {
     try {
       setLoading(true);
@@ -47,13 +46,11 @@ const StoreManagementPage = () => {
     fetchStores();
   }, [searchTerm, filterStatus]);
 
-  // Handle form input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Open modal for creating new store
   const handleCreateNew = () => {
     setEditingStore(null);
     setFormData({
@@ -64,7 +61,6 @@ const StoreManagementPage = () => {
     setShowModal(true);
   };
 
-  // Open modal for editing store
   const handleEdit = (store: Store) => {
     setEditingStore(store);
     setFormData({
@@ -75,14 +71,12 @@ const StoreManagementPage = () => {
     setShowModal(true);
   };
 
-  // Submit form (create or update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     try {
       if (editingStore) {
-        // Update existing store
         const updateData: StoreUpdateRequest = {
           store_name: formData.store_name,
           store_address: formData.store_address,
@@ -94,7 +88,6 @@ const StoreManagementPage = () => {
           showToast('Store updated successfully!', 'success');
         }
       } else {
-        // Create new store
         const response = await storeService.createStore(formData);
         if (response.success) {
           setShowModal(false);
@@ -108,7 +101,6 @@ const StoreManagementPage = () => {
     }
   };
 
-  // Toggle store status (activate/deactivate)
   const handleToggleStatus = async (store: Store) => {
     const action = store.is_active ? 'deactivate' : 'activate';
     const confirmMessage = store.is_active
@@ -129,7 +121,6 @@ const StoreManagementPage = () => {
     }
   };
 
-  // Filter and sort stores
   const filteredStores = [...stores].sort((a, b) => {
     let compareValue = 0;
     
@@ -148,7 +139,6 @@ const StoreManagementPage = () => {
     return sortOrder === 'asc' ? compareValue : -compareValue;
   });
 
-  // Get statistics
   const totalStores = stores.length;
   const activeStores = stores.filter(s => s.is_active).length;
   const inactiveStores = stores.filter(s => !s.is_active).length;

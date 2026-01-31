@@ -4,9 +4,6 @@ export interface ProductBatch {
   product_id: number;
   production_date: string;
   expired_date: string;
-  status: 'ACTIVE' | 'NEAR_EXPIRY' | 'EXPIRED' | 'DISPOSED';
-  disposed_reason?: 'EXPIRED' | 'WRONG_DATA' | 'DEFECTIVE' | null;
-  disposed_at?: string | null;
   created_at?: string;
 }
 
@@ -19,8 +16,9 @@ export interface ProductBatchWithDetails {
   expired_date: string;
   status: string;
   quantity: number;
-  disposed_reason?: string | null;
-  disposed_at?: string | null;
+  disposed_reason?: string | null; 
+  disposed_at?: string | null; 
+  inventory_id?: number; 
   created_at: string;
 }
 

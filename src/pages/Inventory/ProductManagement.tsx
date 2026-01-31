@@ -16,7 +16,6 @@ const ProductManagement = () => {
   });
   const { showToast } = useToast();
 
-  // Load products
   const loadProducts = async () => {
     try {
       setLoading(true);
@@ -34,7 +33,6 @@ const ProductManagement = () => {
     loadProducts();
   }, []);
 
-  // Handle search
   const handleSearch = async (term: string) => {
     setSearchTerm(term);
     if (term.trim()) {
@@ -49,7 +47,6 @@ const ProductManagement = () => {
     }
   };
 
-  // Open modal for create or edit
   const openModal = (product?: Product) => {
     if (product) {
       setEditingProduct(product);
@@ -67,7 +64,6 @@ const ProductManagement = () => {
     setIsModalOpen(true);
   };
 
-  // Close modal
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
@@ -77,7 +73,6 @@ const ProductManagement = () => {
     });
   };
 
-  // Handle form submit (create or update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -88,7 +83,6 @@ const ProductManagement = () => {
 
     try {
       if (editingProduct) {
-        // Update
         const updateData: ProductUpdateRequest = {
           product_name: formData.product_name,
           unit: formData.unit,
@@ -96,7 +90,6 @@ const ProductManagement = () => {
         await productService.updateProduct(editingProduct.product_id, updateData);
         showToast('Product updated successfully', 'success');
       } else {
-        // Create
         await productService.createProduct(formData);
         showToast('Product created successfully', 'success');
       }
@@ -108,7 +101,6 @@ const ProductManagement = () => {
     }
   };
 
-  // Handle toggle active/deactive
   const handleToggleActive = async (product: Product) => {
     const action = product.is_active ? 'deactivate' : 'activate';
     if (!window.confirm(`Are you sure you want to ${action} "${product.product_name}"?`)) {

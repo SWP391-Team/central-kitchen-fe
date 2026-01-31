@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { productBatchService } from '@/api/services/productBatchService';
+import { inventoryService } from '@/api/services/inventoryService';
 import { productService } from '@/api/services/productService';
 import { ProductBatchWithDetails, Product, ProductBatchCreateRequest } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
@@ -25,12 +26,11 @@ const InventoryManagement = () => {
   const { showToast } = useToast();
   const { user } = useAuth();
 
-  // Load batches and products
   const loadData = async () => {
     try {
       setLoading(true);
       const [batchesData, productsData] = await Promise.all([
-        productBatchService.getAllBatches(),
+        inventoryService.getCentralKitchenInventory(),
         productService.getActiveProducts(),
       ]);
       setBatches(batchesData);
@@ -47,7 +47,6 @@ const InventoryManagement = () => {
     loadData();
   }, []);
 
-  // Open modal
   const openModal = () => {
     setBatchForms([
       {
@@ -60,7 +59,6 @@ const InventoryManagement = () => {
     setIsModalOpen(true);
   };
 
-  // Close modal
   const closeModal = () => {
     setIsModalOpen(false);
     setBatchForms([
@@ -73,7 +71,6 @@ const InventoryManagement = () => {
     ]);
   };
 
-  // Add new batch form
   const addBatchForm = () => {
     setBatchForms([
       ...batchForms,
@@ -86,25 +83,21 @@ const InventoryManagement = () => {
     ]);
   };
 
-  // Remove batch form
   const removeBatchForm = (index: number) => {
     if (batchForms.length > 1) {
       setBatchForms(batchForms.filter((_, i) => i !== index));
     }
   };
 
-  // Update batch form
   const updateBatchForm = (index: number, field: keyof ProductBatchCreateRequest, value: any) => {
     const newForms = [...batchForms];
     newForms[index] = { ...newForms[index], [field]: value };
     setBatchForms(newForms);
   };
 
-  // Submit batches
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate all forms
     for (let i = 0; i < batchForms.length; i++) {
       const form = batchForms[i];
       if (!form.product_id || form.product_id === 0) {
@@ -120,7 +113,6 @@ const InventoryManagement = () => {
         return;
       }
 
-      // Validate expired date
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const expiredDate = new Date(form.expired_date);
@@ -143,23 +135,26 @@ const InventoryManagement = () => {
     }
   };
 
-  // Handle dispose
   const handleDispose = async (batch: ProductBatchWithDetails) => {
     if (batch.status === 'DISPOSED') {
       showToast('Batch is already disposed', 'error');
       return;
     }
 
+    if (!batch.inventory_id) {
+      showToast('Inventory ID not found', 'error');
+      return;
+    }
+
     setSelectedBatch(batch);
 
-    // For EXPIRED batches, dispose immediately with EXPIRED reason
     if (batch.status === 'EXPIRED') {
       if (!window.confirm(`Are you sure you want to dispose batch #${batch.batch_id}?`)) {
         return;
       }
       
       try {
-        await productBatchService.disposeBatch(batch.batch_id, { disposed_reason: 'EXPIRED' });
+        await inventoryService.disposeInventory(batch.inventory_id, { disposed_reason: 'EXPIRED' });
         showToast('Batch disposed successfully', 'success');
         loadData();
       } catch (error: any) {
@@ -169,20 +164,23 @@ const InventoryManagement = () => {
       return;
     }
 
-    // For ACTIVE or NEAR_EXPIRY batches, show modal to select reason
     setDisposeReason('');
     setIsDisposeModalOpen(true);
   };
 
-  // Handle dispose with reason
   const handleDisposeWithReason = async () => {
     if (!selectedBatch || !disposeReason) {
       showToast('Please select a reason', 'error');
       return;
     }
 
+    if (!selectedBatch.inventory_id) {
+      showToast('Inventory ID not found', 'error');
+      return;
+    }
+
     try {
-      await productBatchService.disposeBatch(selectedBatch.batch_id, { disposed_reason: disposeReason });
+      await inventoryService.disposeInventory(selectedBatch.inventory_id, { disposed_reason: disposeReason });
       showToast('Batch disposed successfully', 'success');
       setIsDisposeModalOpen(false);
       setSelectedBatch(null);
@@ -194,21 +192,17 @@ const InventoryManagement = () => {
     }
   };
 
-  // Get available dispose reasons based on user role
   const getAvailableReasons = (): Array<{ value: 'WRONG_DATA' | 'DEFECTIVE'; label: string }> => {
     if (user?.role_id === 1) {
-      // Admin sees both
       return [
         { value: 'WRONG_DATA', label: 'Wrong Data' },
         { value: 'DEFECTIVE', label: 'Defective' },
       ];
     } else {
-      // Central Staff only sees DEFECTIVE
       return [{ value: 'DEFECTIVE', label: 'Defective' }];
     }
   };
 
-  // Get status badge color
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ACTIVE':
@@ -224,12 +218,10 @@ const InventoryManagement = () => {
     }
   };
 
-  // Check if batch is read-only
   const isReadOnly = (status: string) => {
     return status === 'EXPIRED' || status === 'DISPOSED';
   };
 
-  // Get tomorrow's date for min expired_date
   const getTomorrowDate = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);

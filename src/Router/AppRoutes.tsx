@@ -5,7 +5,6 @@ import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import CentralKitchenInventoryPage from '@/pages/Inventory/CentralKitchenInventoryPage'
 import StoreDistrict1InventoryPage from '@/pages/Inventory/StoreDistrict1InventoryPage'
 import StoreDistrict2InventoryPage from '@/pages/Inventory/StoreDistrict2InventoryPage'
-import SupplyOrderPage from '@/pages/SupplyOrder/SupplyOrderPage'
 import SupplyOrderStorePage from '@/pages/SupplyOrder/SupplyOrderStorePage'
 import SupplyOrderCentralKitchenPage from '@/pages/SupplyOrder/SupplyOrderCentralKitchenPage'
 import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
@@ -14,7 +13,6 @@ import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
 import { useAuth } from '@/contexts/AuthContext'
 
-// Protected route wrapper with role-based access
 const ProtectedRoute = ({ 
   children, 
   allowedRoles 
@@ -61,12 +59,6 @@ const AppRouter = () => {
         <Route 
           path="/inventory/store-district-2" 
           element={<ProtectedRoute allowedRoles={[1, 3]}><StoreDistrict2InventoryPage /></ProtectedRoute>} 
-        />
-        
-        {/* Supply Order - Admin, Central_Staff, Store_Staff */}
-        <Route 
-          path="/supply-order" 
-          element={<ProtectedRoute allowedRoles={[1, 2, 3]}><SupplyOrderPage /></ProtectedRoute>} 
         />
         
         {/* Supply Order Store - Admin (read-only), Store_Staff */}

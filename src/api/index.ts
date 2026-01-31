@@ -1,2 +1,2 @@
-// Re-export all services
 export * from './services/userService';
+export * from './services/inventoryService';

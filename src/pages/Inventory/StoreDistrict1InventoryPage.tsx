@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react';
-import { productBatchService } from '@/api/services/productBatchService';
+import { inventoryService } from '@/api/services/inventoryService';
 import { ProductBatchWithDetails } from '@/api/types';
+import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const StoreDistrict1InventoryPage = () => {
   const [batches, setBatches] = useState<ProductBatchWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isDisposeModalOpen, setIsDisposeModalOpen] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState<ProductBatchWithDetails | null>(null);
+  const [disposeReason, setDisposeReason] = useState<'WRONG_DATA' | 'DEFECTIVE' | ''>('');
+  const { showToast } = useToast();
+  const { user } = useAuth();
 
   const STORE_DISTRICT_1_ID = 2;
 
@@ -16,7 +24,7 @@ const StoreDistrict1InventoryPage = () => {
   const loadInventory = async () => {
     try {
       setLoading(true);
-      const data = await productBatchService.getBatchesByStore(STORE_DISTRICT_1_ID);
+      const data = await inventoryService.getInventoryByStore(STORE_DISTRICT_1_ID);
       setBatches(data);
       setError('');
     } catch (err: any) {
@@ -57,6 +65,74 @@ const StoreDistrict1InventoryPage = () => {
       case 'EXPIRED': return 'Expired';
       case 'DISPOSED': return 'Disposed';
       default: return status;
+    }
+  };
+
+  const handleDispose = async (batch: ProductBatchWithDetails) => {
+    if (batch.status === 'DISPOSED') {
+      showToast('Batch is already disposed', 'error');
+      return;
+    }
+
+    if (!batch.inventory_id) {
+      showToast('Inventory ID not found', 'error');
+      return;
+    }
+
+    setSelectedBatch(batch);
+
+    if (batch.status === 'EXPIRED') {
+      if (!window.confirm(`Are you sure you want to dispose batch #${batch.batch_id}?`)) {
+        return;
+      }
+      
+      try {
+        await inventoryService.disposeInventory(batch.inventory_id, { disposed_reason: 'EXPIRED' });
+        showToast('Batch disposed successfully', 'success');
+        loadInventory();
+      } catch (error: any) {
+        const errorMessage = error.response?.data?.message || 'Failed to dispose batch';
+        showToast(errorMessage, 'error');
+      }
+      return;
+    }
+
+    setDisposeReason('');
+    setIsDisposeModalOpen(true);
+  };
+
+  const handleDisposeWithReason = async () => {
+    if (!selectedBatch || !disposeReason) {
+      showToast('Please select a reason', 'error');
+      return;
+    }
+
+    if (!selectedBatch.inventory_id) {
+      showToast('Inventory ID not found', 'error');
+      return;
+    }
+
+    try {
+      await inventoryService.disposeInventory(selectedBatch.inventory_id, { disposed_reason: disposeReason });
+      showToast('Batch disposed successfully', 'success');
+      setIsDisposeModalOpen(false);
+      setSelectedBatch(null);
+      setDisposeReason('');
+      loadInventory();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to dispose batch';
+      showToast(errorMessage, 'error');
+    }
+  };
+
+  const getAvailableReasons = (): Array<{ value: 'WRONG_DATA' | 'DEFECTIVE'; label: string }> => {
+    if (user?.role_id === 1) {
+      return [
+        { value: 'WRONG_DATA', label: 'Wrong Data' },
+        { value: 'DEFECTIVE', label: 'Defective' },
+      ];
+    } else {
+      return [{ value: 'DEFECTIVE', label: 'Defective' }];
     }
   };
 
@@ -116,12 +192,15 @@ const StoreDistrict1InventoryPage = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {batches.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                   No inventory batches found
                 </td>
               </tr>
@@ -151,6 +230,16 @@ const StoreDistrict1InventoryPage = () => {
                       {getStatusText(batch.status)}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {batch.status !== 'DISPOSED' && (
+                      <button
+                        onClick={() => handleDispose(batch)}
+                        className="text-red-600 hover:text-red-900 font-medium"
+                      >
+                        Dispose
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))
             )}
@@ -174,6 +263,79 @@ const StoreDistrict1InventoryPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Dispose Modal */}
+      {isDisposeModalOpen && selectedBatch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Dispose Batch #{selectedBatch.batch_id}
+              </h3>
+              <button
+                onClick={() => {
+                  setIsDisposeModalOpen(false);
+                  setSelectedBatch(null);
+                  setDisposeReason('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Product: <span className="font-semibold">{selectedBatch.product_name}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Quantity: <span className="font-semibold">{selectedBatch.quantity} {selectedBatch.unit}</span>
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for disposal <span className="text-red-500">*</span>
+              </label>
+              <div className="space-y-2">
+                {getAvailableReasons().map((reason) => (
+                  <label key={reason.value} className="flex items-center">
+                    <input
+                      type="radio"
+                      name="disposeReason"
+                      value={reason.value}
+                      checked={disposeReason === reason.value}
+                      onChange={(e) => setDisposeReason(e.target.value as 'WRONG_DATA' | 'DEFECTIVE')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-700">{reason.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setIsDisposeModalOpen(false);
+                  setSelectedBatch(null);
+                  setDisposeReason('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDisposeWithReason}
+                disabled={!disposeReason}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Dispose
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

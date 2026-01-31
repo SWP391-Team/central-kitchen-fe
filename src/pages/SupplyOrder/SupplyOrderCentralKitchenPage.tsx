@@ -48,7 +48,6 @@ const SupplyOrderCentralKitchenPage = () => {
       const data = await supplyOrderService.getSupplyOrderByIdCentral(orderId);
       setSelectedOrder(data);
       
-      // Initialize review state
       const initialState: ReviewState = {};
       data.items.forEach(item => {
         initialState[item.supply_order_item_id] = { action: '' };
@@ -109,10 +108,8 @@ const SupplyOrderCentralKitchenPage = () => {
     if (!selectedOrder) return;
 
     try {
-      // Validate all items have an action
       const items: ReviewItemRequest[] = [];
       
-      // Track total approved quantity per product
       const productQuantityMap = new Map<number, { total: number; name: string; unit: string }>();
 
       for (const item of selectedOrder.items) {
@@ -129,7 +126,6 @@ const SupplyOrderCentralKitchenPage = () => {
           }
         }
 
-        // Calculate total approved for each product
         if (state.action === 'APPROVE' || state.action === 'PARTLY_APPROVE') {
           const approvedQty = state.action === 'APPROVE' ? item.requested_quantity : (state.approved_quantity || 0);
           const current = productQuantityMap.get(item.product_id) || { total: 0, name: item.product_name || '', unit: item.unit || '' };

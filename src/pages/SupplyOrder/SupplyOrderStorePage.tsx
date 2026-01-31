@@ -50,7 +50,7 @@ const SupplyOrderStorePage = () => {
   const loadProducts = async () => {
     try {
       const data = await productService.getActiveProducts();
-      console.log('Loaded products:', data); // Debug log
+      console.log('Loaded products:', data); 
       setProducts(data);
     } catch (err: any) {
       console.error('Failed to load products:', err);

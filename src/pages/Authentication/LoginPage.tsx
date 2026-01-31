@@ -19,10 +19,8 @@ const LoginPage = () => {
     try {
       const response = await authService.login({ username, password });
       
-      // Store token in localStorage
       localStorage.setItem('token', response.token);
       
-      // Update auth context
       login({
         user_id: response.user.user_id,
         username: response.user.username,
@@ -32,7 +30,6 @@ const LoginPage = () => {
         created_at: new Date().toISOString(),
       });
 
-      // Redirect based on role
       if (response.user.role_id === 1) {
         navigate('/users');
       } else {
