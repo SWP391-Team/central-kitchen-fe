@@ -3,7 +3,11 @@ import LoginPage from '@/pages/Authentication/LoginPage'
 import MainLayout from '@/layouts/MainLayout'
 import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import CentralKitchenInventoryPage from '@/pages/Inventory/CentralKitchenInventoryPage'
+import StoreDistrict1InventoryPage from '@/pages/Inventory/StoreDistrict1InventoryPage'
+import StoreDistrict2InventoryPage from '@/pages/Inventory/StoreDistrict2InventoryPage'
 import SupplyOrderPage from '@/pages/SupplyOrder/SupplyOrderPage'
+import SupplyOrderStorePage from '@/pages/SupplyOrder/SupplyOrderStorePage'
+import SupplyOrderCentralKitchenPage from '@/pages/SupplyOrder/SupplyOrderCentralKitchenPage'
 import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
 import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
@@ -47,10 +51,34 @@ const AppRouter = () => {
           element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
         />
         
+        {/* Store District 1 Inventory - Admin, Store_Staff (store_id = 2) */}
+        <Route 
+          path="/inventory/store-district-1" 
+          element={<ProtectedRoute allowedRoles={[1, 3]}><StoreDistrict1InventoryPage /></ProtectedRoute>} 
+        />
+        
+        {/* Store District 2 Inventory - Admin, Store_Staff (store_id = 3) */}
+        <Route 
+          path="/inventory/store-district-2" 
+          element={<ProtectedRoute allowedRoles={[1, 3]}><StoreDistrict2InventoryPage /></ProtectedRoute>} 
+        />
+        
         {/* Supply Order - Admin, Central_Staff, Store_Staff */}
         <Route 
           path="/supply-order" 
           element={<ProtectedRoute allowedRoles={[1, 2, 3]}><SupplyOrderPage /></ProtectedRoute>} 
+        />
+        
+        {/* Supply Order Store - Admin (read-only), Store_Staff */}
+        <Route 
+          path="/supply-order/store" 
+          element={<ProtectedRoute allowedRoles={[1, 3]}><SupplyOrderStorePage /></ProtectedRoute>} 
+        />
+        
+        {/* Supply Order Central Kitchen - Admin (read-only), Central_Staff */}
+        <Route 
+          path="/supply-order/central-kitchen" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><SupplyOrderCentralKitchenPage /></ProtectedRoute>} 
         />
         
         {/* Customer Order - Admin, Store_Staff */}

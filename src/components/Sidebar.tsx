@@ -25,7 +25,7 @@ interface MenuItem {
   name: string;
   path: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  roles: number[]; // role_ids that can access this menu item
+  roles: number[]; 
   subItems?: SubMenuItem[];
 }
 
@@ -34,31 +34,28 @@ const menuItems: MenuItem[] = [
     name: 'Dashboard',
     path: '/',
     icon: HomeIcon,
-    roles: [1, 2, 3], // Admin, Central_Staff, Store_Staff
+    roles: [1, 2, 3],
   },
   {
     name: 'Inventory',
     path: '/inventory',
     icon: CubeIcon,
-    roles: [1, 2, 3], // Admin, Central_Staff, Store_Staff
+    roles: [1, 2, 3], 
     subItems: [
       {
         name: 'Central Kitchen Inventory',
         path: '/inventory/central-kitchen',
-        roles: [1], 
-        storeIds: [1], 
+        roles: [1, 2], 
       },
       {
         name: 'Store District 1 Inventory',
         path: '/inventory/store-district-1',
-        roles: [1], // Admin
-        storeIds: [2], // store_id = 2
+        roles: [1, 3], 
       },
       {
         name: 'Store District 2 Inventory',
         path: '/inventory/store-district-2',
-        roles: [1], // Admin
-        storeIds: [3], // store_id = 3
+        roles: [1, 3], 
       },
     ],
   },
@@ -66,31 +63,43 @@ const menuItems: MenuItem[] = [
     name: 'Supply Order',
     path: '/supply-order',
     icon: TruckIcon,
-    roles: [1, 2, 3], // Admin, Central_Staff, Store_Staff
+    roles: [1, 2, 3],
+    subItems: [
+      {
+        name: 'Supply Order Central Kitchen',
+        path: '/supply-order/central-kitchen',
+        roles: [1, 2], 
+      },
+      {
+        name: 'Supply Order Store',
+        path: '/supply-order/store',
+        roles: [1, 3], 
+      },
+    ],
   },
   {
     name: 'Customer Order',
     path: '/customer-order',
     icon: ShoppingCartIcon,
-    roles: [1, 3], // Admin, Store_Staff
+    roles: [1, 3], 
   },
   {
     name: 'User Management',
     path: '/users',
     icon: UsersIcon,
-    roles: [1], // Admin only
+    roles: [1], 
   },
   {
     name: 'Store Management',
     path: '/stores',
     icon: BuildingStorefrontIcon,
-    roles: [1], // Admin only
+    roles: [1], 
   },
   {
     name: 'Audit Log',
     path: '/audit-log',
     icon: DocumentTextIcon,
-    roles: [1], // Admin only
+    roles: [1], 
   },
 ];
 
@@ -107,24 +116,19 @@ const Sidebar = () => {
 
   if (!user) return null;
 
-  // Filter menu items based on user role
   const filteredMenuItems = menuItems.filter((item) =>
     item.roles.includes(user.role_id)
   );
 
-  // Filter sub-items based on user role and store_id
   const filterSubItems = (subItems?: SubMenuItem[]) => {
     if (!subItems) return [];
     
     return subItems.filter((subItem) => {
-      // Check role access
       const hasRoleAccess = !subItem.roles || subItem.roles.includes(user.role_id);
       
-      // Check store_id access
       const hasStoreAccess = !subItem.storeIds || 
         (user.store_id !== null && subItem.storeIds.includes(user.store_id));
       
-      // User has access if they have role access OR store access
       return hasRoleAccess || hasStoreAccess;
     });
   };
