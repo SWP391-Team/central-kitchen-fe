@@ -2,7 +2,8 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from '@/pages/Authentication/LoginPage'
 import MainLayout from '@/layouts/MainLayout'
 import DashboardPage from '@/pages/Dashboard/DashboardPage'
-import CentralKitchenInventoryPage from '@/pages/Inventory/CentralKitchenInventoryPage'
+import InventoryManagement from '@/pages/Inventory/InventoryManagement'
+import ProductManagement from '@/pages/Inventory/ProductManagement'
 import StoreInventoryPage from '@/pages/Inventory/StoreInventoryPage'
 import SupplyOrderStorePage from '@/pages/SupplyOrder/SupplyOrderStorePage'
 import SupplyOrderCentralKitchenPage from '@/pages/SupplyOrder/SupplyOrderCentralKitchenPage'
@@ -45,19 +46,25 @@ const AppRouter = () => {
         {/* Central Kitchen Inventory - Admin, Central_Staff - Use store/1 */}
         <Route 
           path="/inventory/central-kitchen" 
-          element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><InventoryManagement /></ProtectedRoute>} 
         />
         
         {/* Also support direct access via /inventory/store/1 */}
         <Route 
           path="/inventory/store/1" 
-          element={<ProtectedRoute allowedRoles={[1, 2]}><CentralKitchenInventoryPage /></ProtectedRoute>} 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><InventoryManagement /></ProtectedRoute>} 
         />
         
         {/* Dynamic Store Inventory - Admin, Store_Staff */}
         <Route 
           path="/inventory/store/:storeId" 
           element={<ProtectedRoute allowedRoles={[1, 3]}><StoreInventoryPage /></ProtectedRoute>} 
+        />
+        
+        {/* Product Management - Admin, Central_Staff */}
+        <Route 
+          path="/products" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><ProductManagement /></ProtectedRoute>} 
         />
         
         {/* Supply Order Store - Admin (read-only), Store_Staff */}

@@ -14,6 +14,7 @@ import {
   ArrowLeftOnRectangleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ArchiveBoxIcon,
 } from '@heroicons/react/24/outline';
 
 interface SubMenuItem {
@@ -79,6 +80,12 @@ const menuItems: MenuItem[] = [
     path: '/customer-order',
     icon: ShoppingCartIcon,
     roles: [1, 3], 
+  },
+  {
+    name: 'Product Management',
+    path: '/products',
+    icon: ArchiveBoxIcon,
+    roles: [1, 2], 
   },
   {
     name: 'User Management',
