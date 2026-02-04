@@ -195,7 +195,13 @@ const StoreInventoryPage = () => {
                 Batch ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Batch Code
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Product Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Product Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Quantity
@@ -220,7 +226,7 @@ const StoreInventoryPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {batches.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={10} className="px-6 py-8 text-center text-gray-500">
                   No inventory batches found
                 </td>
               </tr>
@@ -230,8 +236,14 @@ const StoreInventoryPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     #{batch.batch_id}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-700">
+                    {batch.batch_code || '-'}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {batch.product_name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {batch.product_code || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
                     {batch.quantity}

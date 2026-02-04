@@ -28,6 +28,7 @@ const SupplyOrderStorePage = () => {
   const [selectedOrder, setSelectedOrder] = useState<SupplyOrderDetailResponse | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ product_id: 0, requested_quantity: 1 }]);
   const [confirmingReceived, setConfirmingReceived] = useState<number | null>(null);
+  const [supplyOrderCode, setSupplyOrderCode] = useState('');
 
   useEffect(() => {
     loadOrders();
@@ -78,7 +79,19 @@ const SupplyOrderStorePage = () => {
     e.preventDefault();
     setError('');
 
-    // Validation
+    if (!supplyOrderCode || !supplyOrderCode.trim()) {
+      setError('Supply order code is required');
+      return;
+    }
+
+    const supplyOrderCodeRegex = /^SO-\d{6}-\d{4}$/;
+    const upperSupplyOrderCode = supplyOrderCode.toUpperCase();
+
+    if (!supplyOrderCodeRegex.test(upperSupplyOrderCode)) {
+      setError('Supply order code must follow format: SO-YYYYMM-XXXX');
+      return;
+    }
+
     const validItems = orderItems.filter(item => item.product_id > 0 && item.requested_quantity > 0);
     
     if (validItems.length === 0) {
@@ -86,7 +99,6 @@ const SupplyOrderStorePage = () => {
       return;
     }
 
-    // Check for duplicate products
     const productIds = validItems.map(item => item.product_id);
     const uniqueProductIds = new Set(productIds);
     if (productIds.length !== uniqueProductIds.size) {
@@ -96,6 +108,7 @@ const SupplyOrderStorePage = () => {
 
     try {
       const requestData: SupplyOrderCreateRequest = {
+        supply_order_code: upperSupplyOrderCode,
         items: validItems.map(item => ({
           product_id: item.product_id,
           requested_quantity: item.requested_quantity
@@ -105,6 +118,7 @@ const SupplyOrderStorePage = () => {
       await supplyOrderService.createSupplyOrder(requestData);
       setShowCreateModal(false);
       setOrderItems([{ product_id: 0, requested_quantity: 1 }]);
+      setSupplyOrderCode('');
       loadOrders();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create supply order');
@@ -130,7 +144,7 @@ const SupplyOrderStorePage = () => {
       setConfirmingReceived(orderId);
       setError('');
       await supplyOrderService.confirmReceived(orderId);
-      await loadOrders(); // Reload list
+      await loadOrders(); 
       alert('Order confirmed as received and inventory updated successfully!');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to confirm received');
@@ -227,6 +241,9 @@ const SupplyOrderStorePage = () => {
                 Order ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Supply Order Code
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Store
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -246,7 +263,7 @@ const SupplyOrderStorePage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   No supply orders found
                 </td>
               </tr>
@@ -255,6 +272,9 @@ const SupplyOrderStorePage = () => {
                 <tr key={order.supply_order_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     #{order.supply_order_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
+                    {order.supply_order_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {order.store_name || `Store ${order.store_id}`}
@@ -307,6 +327,7 @@ const SupplyOrderStorePage = () => {
                 onClick={() => {
                   setShowCreateModal(false);
                   setOrderItems([{ product_id: 0, requested_quantity: 1 }]);
+                  setSupplyOrderCode('');
                   setError('');
                 }}
                 className="text-gray-500 hover:text-gray-700"
@@ -323,6 +344,23 @@ const SupplyOrderStorePage = () => {
 
             <form onSubmit={handleCreateOrder}>
               <div className="space-y-4">
+                {/* Supply Order Code Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supply Order Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={supplyOrderCode}
+                    onChange={(e) => setSupplyOrderCode(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+                    placeholder="SO-YYYYMM-XXXX (e.g., SO-202602-0001)"
+                    maxLength={15}
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Format: SO-YYYYMM-XXXX (auto uppercase)</p>
+                </div>
+
                 <p className="text-sm text-gray-600">Available products: {products.length}</p>
                 {orderItems.map((item, index) => (
                   <div key={index} className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
@@ -339,7 +377,7 @@ const SupplyOrderStorePage = () => {
                         <option value={0}>Select a product</option>
                         {products.map((product) => (
                           <option key={product.product_id} value={product.product_id}>
-                            {product.product_name} ({product.unit})
+                            {product.product_code} - {product.product_name} ({product.unit})
                           </option>
                         ))}
                       </select>
@@ -426,6 +464,10 @@ const SupplyOrderStorePage = () => {
                 <p className="text-lg font-semibold">#{selectedOrder.supply_order_id}</p>
               </div>
               <div>
+                <p className="text-sm text-gray-600">Supply Order Code</p>
+                <p className="text-lg font-bold text-indigo-700">{selectedOrder.supply_order_code}</p>
+              </div>
+              <div>
                 <p className="text-sm text-gray-600">Status</p>
                 <span className={getStatusBadgeClass(selectedOrder.status)}>
                   {getStatusText(selectedOrder.status)}
@@ -455,6 +497,9 @@ const SupplyOrderStorePage = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Product Code
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Product
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -474,6 +519,9 @@ const SupplyOrderStorePage = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {selectedOrder.items.map((item) => (
                     <tr key={item.supply_order_item_id}>
+                      <td className="px-4 py-3 text-sm font-bold text-blue-700">
+                        {item.product_code || '-'}
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {item.product_name || `Product ${item.product_id}`}
                       </td>

@@ -17,6 +17,7 @@ const InventoryManagement = () => {
   const [disposeReason, setDisposeReason] = useState<'WRONG_DATA' | 'DEFECTIVE' | ''>('');
   const [batchForms, setBatchForms] = useState<ProductBatchCreateRequest[]>([
     {
+      batch_code: '',
       product_id: 0,
       production_date: new Date().toISOString().split('T')[0],
       expired_date: '',
@@ -50,6 +51,7 @@ const InventoryManagement = () => {
   const openModal = () => {
     setBatchForms([
       {
+        batch_code: '',
         product_id: 0,
         production_date: new Date().toISOString().split('T')[0],
         expired_date: '',
@@ -63,6 +65,7 @@ const InventoryManagement = () => {
     setIsModalOpen(false);
     setBatchForms([
       {
+        batch_code: '',
         product_id: 0,
         production_date: new Date().toISOString().split('T')[0],
         expired_date: '',
@@ -75,6 +78,7 @@ const InventoryManagement = () => {
     setBatchForms([
       ...batchForms,
       {
+        batch_code: '',
         product_id: 0,
         production_date: new Date().toISOString().split('T')[0],
         expired_date: '',
@@ -100,6 +104,20 @@ const InventoryManagement = () => {
 
     for (let i = 0; i < batchForms.length; i++) {
       const form = batchForms[i];
+      
+      if (!form.batch_code || !form.batch_code.trim()) {
+        showToast(`Batch ${i + 1}: Batch code is required`, 'error');
+        return;
+      }
+
+      const batchCodeRegex = /^BATCH-\d{6}-[A-Z0-9]{3}$/;
+      const upperBatchCode = form.batch_code.toUpperCase();
+      
+      if (!batchCodeRegex.test(upperBatchCode)) {
+        showToast(`Batch ${i + 1}: Batch code must follow format BATCH-YYYYMM-XXX`, 'error');
+        return;
+      }
+
       if (!form.product_id || form.product_id === 0) {
         showToast(`Batch ${i + 1}: Please select a product`, 'error');
         return;
@@ -261,6 +279,12 @@ const InventoryManagement = () => {
                     Batch ID
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Batch Code
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Product Code
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Product Name
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -294,6 +318,12 @@ const InventoryManagement = () => {
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       #{batch.batch_id}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-700">
+                      {batch.batch_code}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
+                      {batch.product_code}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {batch.product_name}
@@ -374,6 +404,22 @@ const InventoryManagement = () => {
                   <h4 className="font-semibold mb-3 text-gray-700">Batch {index + 1}</h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Batch Code *
+                      </label>
+                      <input
+                        type="text"
+                        value={form.batch_code}
+                        onChange={(e) => updateBatchForm(index, 'batch_code', e.target.value.toUpperCase())}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                        placeholder="BATCH-YYYYMM-XXX (e.g., BATCH-202602-001)"
+                        maxLength={18}
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Format: BATCH-YYYYMM-XXX (auto uppercase)</p>
+                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Product *
@@ -387,7 +433,7 @@ const InventoryManagement = () => {
                         <option value={0}>Select a product</option>
                         {products.map((product) => (
                           <option key={product.product_id} value={product.product_id}>
-                            {product.product_name} ({product.unit})
+                            {product.product_code} - {product.product_name} ({product.unit})
                           </option>
                         ))}
                       </select>

@@ -1,6 +1,6 @@
-// Product related types
 export interface Product {
   product_id: number;
+  product_code: string;
   product_name: string;
   unit: string;
   is_active: boolean;
@@ -9,11 +9,13 @@ export interface Product {
 }
 
 export interface ProductCreateRequest {
+  product_code: string;
   product_name: string;
   unit: string;
 }
 
 export interface ProductUpdateRequest {
+  product_code?: string; 
   product_name?: string;
   unit?: string;
 }

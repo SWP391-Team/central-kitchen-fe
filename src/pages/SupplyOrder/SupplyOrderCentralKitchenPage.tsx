@@ -242,6 +242,9 @@ const SupplyOrderCentralKitchenPage = () => {
                 Order ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Supply Order Code
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Store
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -261,7 +264,7 @@ const SupplyOrderCentralKitchenPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   No supply orders found
                 </td>
               </tr>
@@ -270,6 +273,9 @@ const SupplyOrderCentralKitchenPage = () => {
                 <tr key={order.supply_order_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     #{order.supply_order_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-700">
+                    {order.supply_order_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {order.store_name || `Store ${order.store_id}`}
@@ -322,7 +328,9 @@ const SupplyOrderCentralKitchenPage = () => {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">Review Order #{selectedOrder.supply_order_id}</h2>
-                <p className="text-sm text-gray-600">Store: {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}</p>
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold text-indigo-700">{selectedOrder.supply_order_code}</span> - Store: {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}
+                </p>
               </div>
               <button
                 onClick={() => {
@@ -364,6 +372,7 @@ const SupplyOrderCentralKitchenPage = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product Code</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Requested Qty</th>
@@ -379,6 +388,7 @@ const SupplyOrderCentralKitchenPage = () => {
                     const state = reviewState[item.supply_order_item_id] || { action: '' };
                     return (
                       <tr key={item.supply_order_item_id}>
+                        <td className="px-4 py-3 text-sm font-bold text-blue-700">{item.product_code || '-'}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.product_name}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.unit}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right">{item.requested_quantity}</td>

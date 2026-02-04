@@ -16,6 +16,7 @@ const UserManagementPage = () => {
   const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'store_id'>('user_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
+    user_code: '',
     username: '',
     password: '',
     role_id: 2,
@@ -56,6 +57,7 @@ const UserManagementPage = () => {
     if (user) {
       setEditingUser(user);
       setFormData({
+        user_code: user.user_code,
         username: user.username,
         password: '',
         role_id: user.role_id,
@@ -65,6 +67,7 @@ const UserManagementPage = () => {
     } else {
       setEditingUser(null);
       setFormData({
+        user_code: '',
         username: '',
         password: '',
         role_id: 2,
@@ -79,6 +82,7 @@ const UserManagementPage = () => {
     setShowModal(false);
     setEditingUser(null);
     setFormData({
+      user_code: '',
       username: '',
       password: '',
       role_id: 2,
@@ -98,10 +102,24 @@ const UserManagementPage = () => {
         if (!updateData.password) {
           delete updateData.password; // Don't send empty password
         }
+        // Remove user_code from update data to prevent modification attempts
+        delete (updateData as any).user_code;
         await userService.updateUser(editingUser.user_id, updateData);
       } else {
-        // Create new user
-        await userService.createUser(formData as UserCreateRequest);
+        // Create new user - validate and format user_code
+        const createData = { ...formData } as UserCreateRequest;
+        
+        // Validate user_code format
+        const userCodePattern = /^USR-\d{4}$/;
+        if (!createData.user_code || !userCodePattern.test(createData.user_code.toUpperCase())) {
+          setError('User code must be in format USR-XXXX (e.g., USR-0001)');
+          return;
+        }
+        
+        // Convert to uppercase
+        createData.user_code = createData.user_code.toUpperCase();
+        
+        await userService.createUser(createData);
       }
       
       handleCloseModal();
@@ -159,6 +177,7 @@ const UserManagementPage = () => {
   const filteredAndSortedUsers = users
     .filter(user => {
       const matchesSearch = searchTerm === '' || 
+        user.user_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getRoleName(user.role_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
         getStoreName(user.store_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -277,7 +296,7 @@ const UserManagementPage = () => {
             <div className="lg:col-span-2">
               <input
                 type="text"
-                placeholder="🔍 Search by username, role, store name, address..."
+                placeholder="🔍 Search by user code, username, role, store name, address..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
@@ -332,6 +351,7 @@ const UserManagementPage = () => {
             <thead className="bg-gray-50 border-b-2 border-gray-200">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">User Code</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Name</th>
@@ -345,6 +365,9 @@ const UserManagementPage = () => {
               <tr key={user.user_id} className="hover:bg-indigo-50 transition-colors duration-150">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="font-semibold text-gray-800">#{user.user_id}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="font-bold text-indigo-700 text-lg">{user.user_code}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
@@ -430,7 +453,33 @@ const UserManagementPage = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">👤</span>
+                    <span className="mr-2">�</span>
+                    User Code
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.user_code}
+                    onChange={(e) => setFormData({ ...formData, user_code: e.target.value.toUpperCase() })}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all uppercase"
+                    placeholder="USR-0001"
+                    pattern="USR-\d{4}"
+                    title="Format: USR-XXXX (e.g., USR-0001)"
+                    required
+                    disabled={!!editingUser}
+                    readOnly={!!editingUser}
+                    style={editingUser ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                  />
+                  {editingUser && (
+                    <p className="text-sm text-gray-500 mt-1">⚠️ User code cannot be modified after creation</p>
+                  )}
+                  {!editingUser && (
+                    <p className="text-sm text-gray-500 mt-1">Format: USR-XXXX (e.g., USR-0001, USR-0002)</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
+                    <span className="mr-2">�👤</span>
                     Username
                   </label>
                   <input

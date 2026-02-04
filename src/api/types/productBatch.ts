@@ -1,6 +1,6 @@
-// ProductBatch related types
 export interface ProductBatch {
   batch_id: number;
+  batch_code: string;
   product_id: number;
   production_date: string;
   expired_date: string;
@@ -9,7 +9,9 @@ export interface ProductBatch {
 
 export interface ProductBatchWithDetails {
   batch_id: number;
+  batch_code: string;
   product_id: number;
+  product_code: string;
   product_name: string;
   unit: string;
   production_date: string;
@@ -23,6 +25,7 @@ export interface ProductBatchWithDetails {
 }
 
 export interface ProductBatchCreateRequest {
+  batch_code: string;
   product_id: number;
   production_date: string;
   expired_date: string;

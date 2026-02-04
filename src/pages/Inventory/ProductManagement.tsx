@@ -11,6 +11,7 @@ const ProductManagement = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductCreateRequest>({
+    product_code: '',
     product_name: '',
     unit: '',
   });
@@ -51,12 +52,14 @@ const ProductManagement = () => {
     if (product) {
       setEditingProduct(product);
       setFormData({
+        product_code: product.product_code,
         product_name: product.product_name,
         unit: product.unit,
       });
     } else {
       setEditingProduct(null);
       setFormData({
+        product_code: '',
         product_name: '',
         unit: '',
       });
@@ -68,6 +71,7 @@ const ProductManagement = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
     setFormData({
+      product_code: '',
       product_name: '',
       unit: '',
     });
@@ -87,10 +91,21 @@ const ProductManagement = () => {
           product_name: formData.product_name,
           unit: formData.unit,
         };
+        delete (updateData as any).product_code;
         await productService.updateProduct(editingProduct.product_id, updateData);
         showToast('Product updated successfully', 'success');
       } else {
-        await productService.createProduct(formData);
+        const createData = { ...formData } as ProductCreateRequest;
+        
+        const productCodePattern = /^PRD-[A-Z0-9]{4}$/;
+        if (!createData.product_code || !productCodePattern.test(createData.product_code.toUpperCase())) {
+          showToast('Product code must be in format PRD-XXXX (e.g., PRD-0001)', 'error');
+          return;
+        }
+        
+        createData.product_code = createData.product_code.toUpperCase();
+        
+        await productService.createProduct(createData);
         showToast('Product created successfully', 'success');
       }
       closeModal();
@@ -138,7 +153,7 @@ const ProductManagement = () => {
           </div>
           <input
             type="text"
-            placeholder="Search products by name or unit..."
+            placeholder="Search products by code, name or unit..."
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -165,6 +180,9 @@ const ProductManagement = () => {
                   ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Product Code
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Product Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -186,6 +204,9 @@ const ProductManagement = () => {
                 <tr key={product.product_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {product.product_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
+                    {product.product_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {product.product_name}
@@ -242,6 +263,30 @@ const ProductManagement = () => {
               {editingProduct ? 'Edit Product' : 'Add New Product'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product Code *
+                </label>
+                <input
+                  type="text"
+                  value={formData.product_code}
+                  onChange={(e) => setFormData({ ...formData, product_code: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                  placeholder="PRD-0001"
+                  pattern="PRD-[A-Z0-9]{4}"
+                  title="Format: PRD-XXXX (e.g., PRD-0001)"
+                  required
+                  disabled={!!editingProduct}
+                  readOnly={!!editingProduct}
+                  style={editingProduct ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                />
+                {editingProduct && (
+                  <p className="text-xs text-gray-500 mt-1">⚠️ Product code cannot be modified after creation</p>
+                )}
+                {!editingProduct && (
+                  <p className="text-xs text-gray-500 mt-1">Format: PRD-XXXX (e.g., PRD-0001, PRD-0002)</p>
+                )}
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product Name *

@@ -19,6 +19,7 @@ export interface SupplyOrderItem {
   requested_quantity: number;
   approved_quantity: number | null;
   status: SupplyOrderItemStatus;
+  product_code?: string;
   product_name?: string;
   unit?: string;
   available_quantity?: number;
@@ -26,6 +27,7 @@ export interface SupplyOrderItem {
 
 export interface SupplyOrder {
   supply_order_id: number;
+  supply_order_code: string;
   store_id: number;
   status: SupplyOrderStatus;
   created_at: string;
@@ -41,6 +43,7 @@ export interface SupplyOrderItemCreateRequest {
 }
 
 export interface SupplyOrderCreateRequest {
+  supply_order_code: string;
   items: SupplyOrderItemCreateRequest[];
 }
 

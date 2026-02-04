@@ -1,6 +1,6 @@
-// Store related types
 export interface Store {
   store_id: number;
+  store_code: string;
   store_name: string;
   store_address: string;
   is_active: boolean;
@@ -9,12 +9,14 @@ export interface Store {
 }
 
 export interface StoreCreateRequest {
+  store_code: string;
   store_name: string;
   store_address: string;
   is_active?: boolean;
 }
 
 export interface StoreUpdateRequest {
+  store_code?: string; 
   store_name?: string;
   store_address?: string;
   is_active?: boolean;

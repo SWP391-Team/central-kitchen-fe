@@ -16,6 +16,7 @@ const StoreManagementPage = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   const [formData, setFormData] = useState<StoreCreateRequest>({
+    store_code: '',
     store_name: '',
     store_address: '',
     is_active: true,
@@ -54,6 +55,7 @@ const StoreManagementPage = () => {
   const handleCreateNew = () => {
     setEditingStore(null);
     setFormData({
+      store_code: '',
       store_name: '',
       store_address: '',
       is_active: true,
@@ -64,6 +66,7 @@ const StoreManagementPage = () => {
   const handleEdit = (store: Store) => {
     setEditingStore(store);
     setFormData({
+      store_code: store.store_code,
       store_name: store.store_name,
       store_address: store.store_address,
       is_active: store.is_active,
@@ -81,6 +84,7 @@ const StoreManagementPage = () => {
           store_name: formData.store_name,
           store_address: formData.store_address,
         };
+        delete (updateData as any).store_code;
         const response = await storeService.updateStore(editingStore.store_id, updateData);
         if (response.success) {
           setShowModal(false);
@@ -88,7 +92,17 @@ const StoreManagementPage = () => {
           showToast('Store updated successfully!', 'success');
         }
       } else {
-        const response = await storeService.createStore(formData);
+        const createData = { ...formData } as StoreCreateRequest;
+        
+        const storeCodePattern = /^ST-[A-Z0-9]{3}-[A-Z0-9]{4}$/;
+        if (!createData.store_code || !storeCodePattern.test(createData.store_code.toUpperCase())) {
+          setError('Store code must be in format ST-XXX-XXXX (e.g., ST-HCM-0001)');
+          return;
+        }
+        
+        createData.store_code = createData.store_code.toUpperCase();
+        
+        const response = await storeService.createStore(createData);
         if (response.success) {
           setShowModal(false);
           fetchStores();
@@ -193,7 +207,7 @@ const StoreManagementPage = () => {
         <div className="flex flex-wrap gap-4">
           <input
             type="text"
-            placeholder="Search by store name or address..."
+            placeholder="Search by store code, name or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[300px]"
@@ -237,6 +251,9 @@ const StoreManagementPage = () => {
                 Store ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Store Code
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Store Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -253,7 +270,7 @@ const StoreManagementPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredStores.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   No stores found
                 </td>
               </tr>
@@ -262,6 +279,9 @@ const StoreManagementPage = () => {
                 <tr key={store.store_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {store.store_id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
+                    {store.store_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {store.store_name}
@@ -333,6 +353,32 @@ const StoreManagementPage = () => {
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Store Code *
+                </label>
+                <input
+                  type="text"
+                  name="store_code"
+                  value={formData.store_code}
+                  onChange={(e) => setFormData({ ...formData, store_code: e.target.value.toUpperCase() })}
+                  required
+                  disabled={!!editingStore}
+                  readOnly={!!editingStore}
+                  pattern="ST-[A-Z0-9]{3}-[A-Z0-9]{4}"
+                  title="Format: ST-XXX-XXXX (e.g., ST-HCM-0001)"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                  style={editingStore ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                  placeholder="ST-HCM-0001"
+                />
+                {editingStore && (
+                  <p className="text-xs text-gray-500 mt-1">⚠️ Store code cannot be modified after creation</p>
+                )}
+                {!editingStore && (
+                  <p className="text-xs text-gray-500 mt-1">Format: ST-XXX-XXXX (e.g., ST-HCM-0001, ST-HNI-0001)</p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Store Name *

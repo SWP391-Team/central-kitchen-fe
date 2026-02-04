@@ -1,6 +1,6 @@
-// User related types
 export interface User {
   user_id: number;
+  user_code: string;
   username: string;
   role_id: number;
   store_id: number | null;
@@ -10,6 +10,7 @@ export interface User {
 }
 
 export interface UserCreateRequest {
+  user_code: string;
   username: string;
   password: string;
   role_id: number;
@@ -18,6 +19,7 @@ export interface UserCreateRequest {
 }
 
 export interface UserUpdateRequest {
+  user_code?: string; 
   username?: string;
   password?: string;
   role_id?: number;
