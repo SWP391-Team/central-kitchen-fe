@@ -1,7 +1,7 @@
 import api from '../axiosConfig';
 import { 
   ProductBatchWithDetails, 
-  BatchesCreateRequest,
+  BatchPlansCreateRequest,
   ApiResponse 
 } from '../types';
 
@@ -16,7 +16,7 @@ export const productBatchService = {
     return response.data.data;
   },
 
-  createBatches: async (batchesData: BatchesCreateRequest): Promise<ProductBatchWithDetails[]> => {
+  createBatches: async (batchesData: BatchPlansCreateRequest): Promise<ProductBatchWithDetails[]> => {
     const response = await api.post<ApiResponse<ProductBatchWithDetails[]>>('/batches', batchesData);
     return response.data.data;
   },

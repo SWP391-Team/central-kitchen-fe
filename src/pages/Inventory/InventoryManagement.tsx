@@ -1,41 +1,24 @@
 import { useState, useEffect } from 'react';
-import { productBatchService } from '@/api/services/productBatchService';
 import { inventoryService } from '@/api/services/inventoryService';
-import { productService } from '@/api/services/productService';
-import { ProductBatchWithDetails, Product, ProductBatchCreateRequest } from '@/api/types';
+import { ProductBatchWithDetails } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { PlusIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const InventoryManagement = () => {
   const [batches, setBatches] = useState<ProductBatchWithDetails[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDisposeModalOpen, setIsDisposeModalOpen] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchWithDetails | null>(null);
   const [disposeReason, setDisposeReason] = useState<'WRONG_DATA' | 'DEFECTIVE' | ''>('');
-  const [batchForms, setBatchForms] = useState<ProductBatchCreateRequest[]>([
-    {
-      batch_code: '',
-      product_id: 0,
-      production_date: new Date().toISOString().split('T')[0],
-      expired_date: '',
-      quantity: 0,
-    },
-  ]);
   const { showToast } = useToast();
   const { user } = useAuth();
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [batchesData, productsData] = await Promise.all([
-        inventoryService.getCentralKitchenInventory(),
-        productService.getActiveProducts(),
-      ]);
+      const batchesData = await inventoryService.getCentralKitchenInventory();
       setBatches(batchesData);
-      setProducts(productsData);
     } catch (error: any) {
       showToast('Failed to load data', 'error');
       console.error('Error loading data:', error);
@@ -48,114 +31,9 @@ const InventoryManagement = () => {
     loadData();
   }, []);
 
-  const openModal = () => {
-    setBatchForms([
-      {
-        batch_code: '',
-        product_id: 0,
-        production_date: new Date().toISOString().split('T')[0],
-        expired_date: '',
-        quantity: 0,
-      },
-    ]);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setBatchForms([
-      {
-        batch_code: '',
-        product_id: 0,
-        production_date: new Date().toISOString().split('T')[0],
-        expired_date: '',
-        quantity: 0,
-      },
-    ]);
-  };
-
-  const addBatchForm = () => {
-    setBatchForms([
-      ...batchForms,
-      {
-        batch_code: '',
-        product_id: 0,
-        production_date: new Date().toISOString().split('T')[0],
-        expired_date: '',
-        quantity: 0,
-      },
-    ]);
-  };
-
-  const removeBatchForm = (index: number) => {
-    if (batchForms.length > 1) {
-      setBatchForms(batchForms.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateBatchForm = (index: number, field: keyof ProductBatchCreateRequest, value: any) => {
-    const newForms = [...batchForms];
-    newForms[index] = { ...newForms[index], [field]: value };
-    setBatchForms(newForms);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    for (let i = 0; i < batchForms.length; i++) {
-      const form = batchForms[i];
-      
-      if (!form.batch_code || !form.batch_code.trim()) {
-        showToast(`Batch ${i + 1}: Batch code is required`, 'error');
-        return;
-      }
-
-      const batchCodeRegex = /^BATCH-\d{6}-[A-Z0-9]{3}$/;
-      const upperBatchCode = form.batch_code.toUpperCase();
-      
-      if (!batchCodeRegex.test(upperBatchCode)) {
-        showToast(`Batch ${i + 1}: Batch code must follow format BATCH-YYYYMM-XXX`, 'error');
-        return;
-      }
-
-      if (!form.product_id || form.product_id === 0) {
-        showToast(`Batch ${i + 1}: Please select a product`, 'error');
-        return;
-      }
-      if (!form.expired_date) {
-        showToast(`Batch ${i + 1}: Please select expired date`, 'error');
-        return;
-      }
-      if (!form.quantity || form.quantity <= 0) {
-        showToast(`Batch ${i + 1}: Quantity must be greater than 0`, 'error');
-        return;
-      }
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const expiredDate = new Date(form.expired_date);
-      expiredDate.setHours(0, 0, 0, 0);
-
-      if (expiredDate <= today) {
-        showToast(`Batch ${i + 1}: Expired date must be after today`, 'error');
-        return;
-      }
-    }
-
-    try {
-      await productBatchService.createBatches({ batches: batchForms });
-      showToast(`${batchForms.length} batch(es) created successfully`, 'success');
-      closeModal();
-      loadData();
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Failed to create batches';
-      showToast(errorMessage, 'error');
-    }
-  };
-
   const handleDispose = async (batch: ProductBatchWithDetails) => {
-    if (batch.status === 'DISPOSED') {
-      showToast('Batch is already disposed', 'error');
+    if (batch.inventory_status === 'DISPOSED') {
+      showToast('Inventory item is already disposed', 'error');
       return;
     }
 
@@ -166,17 +44,17 @@ const InventoryManagement = () => {
 
     setSelectedBatch(batch);
 
-    if (batch.status === 'EXPIRED') {
-      if (!window.confirm(`Are you sure you want to dispose batch #${batch.batch_id}?`)) {
+    if (batch.inventory_status === 'EXPIRED') {
+      if (!window.confirm(`Are you sure you want to dispose inventory #${batch.inventory_id}?`)) {
         return;
       }
       
       try {
         await inventoryService.disposeInventory(batch.inventory_id, { disposed_reason: 'EXPIRED' });
-        showToast('Batch disposed successfully', 'success');
+        showToast('Inventory item disposed successfully', 'success');
         loadData();
       } catch (error: any) {
-        const errorMessage = error.response?.data?.message || 'Failed to dispose batch';
+        const errorMessage = error.response?.data?.message || 'Failed to dispose inventory';
         showToast(errorMessage, 'error');
       }
       return;
@@ -221,7 +99,7 @@ const InventoryManagement = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status?: string) => {
     switch (status) {
       case 'ACTIVE':
         return 'bg-green-100 text-green-800';
@@ -236,27 +114,15 @@ const InventoryManagement = () => {
     }
   };
 
-  const isReadOnly = (status: string) => {
+  const isReadOnly = (status?: string) => {
     return status === 'EXPIRED' || status === 'DISPOSED';
-  };
-
-  const getTomorrowDate = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
-        <button
-          onClick={openModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          Create Batch
-        </button>
+        <h2 className="text-2xl font-bold text-gray-900">Central Kitchen Inventory</h2>
       </div>
 
       {/* Batches Table */}
@@ -264,11 +130,11 @@ const InventoryManagement = () => {
         {loading ? (
           <div className="p-8 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-600">Loading batches...</p>
+            <p className="mt-2 text-gray-600">Loading inventory...</p>
           </div>
         ) : batches.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            No batches yet. Create your first batch!
+            No inventory items found.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -314,7 +180,7 @@ const InventoryManagement = () => {
                 {batches.map((batch) => (
                   <tr
                     key={batch.batch_id}
-                    className={`${isReadOnly(batch.status) ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                    className={`${isReadOnly(batch.inventory_status) ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       #{batch.batch_id}
@@ -323,7 +189,7 @@ const InventoryManagement = () => {
                       {batch.batch_code}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
-                      {batch.product_code}
+                      {batch.product_code || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {batch.product_name}
@@ -332,32 +198,28 @@ const InventoryManagement = () => {
                       {batch.unit}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {batch.quantity}
+                      {batch.inventory_quantity || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(batch.production_date).toLocaleDateString()}
+                      {batch.production_date ? new Date(batch.production_date).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(batch.expired_date).toLocaleDateString()}
+                      {batch.expired_date ? new Date(batch.expired_date).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
                         className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
-                          batch.status
+                          batch.inventory_status
                         )}`}
                       >
-                        {batch.status}
+                        {batch.inventory_status || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {batch.disposed_reason ? (
-                        <span className="text-gray-700">{batch.disposed_reason}</span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      {batch.inventory_disposed_reason || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {batch.status !== 'DISPOSED' ? (
+                      {batch.inventory_status !== 'DISPOSED' ? (
                         <button
                           onClick={() => handleDispose(batch)}
                           className="text-red-600 hover:text-red-900"
@@ -376,142 +238,6 @@ const InventoryManagement = () => {
           </div>
         )}
       </div>
-
-      {/* Modal for Create Batches */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Create New Batches</h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {batchForms.map((form, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 relative">
-                  {batchForms.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeBatchForm(index)}
-                      className="absolute top-2 right-2 text-red-600 hover:text-red-800"
-                    >
-                      <TrashIcon className="h-5 w-5" />
-                    </button>
-                  )}
-
-                  <h4 className="font-semibold mb-3 text-gray-700">Batch {index + 1}</h4>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Batch Code *
-                      </label>
-                      <input
-                        type="text"
-                        value={form.batch_code}
-                        onChange={(e) => updateBatchForm(index, 'batch_code', e.target.value.toUpperCase())}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                        placeholder="BATCH-YYYYMM-XXX (e.g., BATCH-202602-001)"
-                        maxLength={18}
-                        required
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Format: BATCH-YYYYMM-XXX (auto uppercase)</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Product *
-                      </label>
-                      <select
-                        value={form.product_id}
-                        onChange={(e) => updateBatchForm(index, 'product_id', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      >
-                        <option value={0}>Select a product</option>
-                        {products.map((product) => (
-                          <option key={product.product_id} value={product.product_id}>
-                            {product.product_code} - {product.product_name} ({product.unit})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Quantity *
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={form.quantity || ''}
-                        onChange={(e) => updateBatchForm(index, 'quantity', parseFloat(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter quantity"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Production Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={form.production_date}
-                        onChange={(e) => updateBatchForm(index, 'production_date', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Expired Date *
-                      </label>
-                      <input
-                        type="date"
-                        min={getTomorrowDate()}
-                        value={form.expired_date}
-                        onChange={(e) => updateBatchForm(index, 'expired_date', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={addBatchForm}
-                className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center"
-              >
-                <PlusIcon className="h-5 w-5 mr-2" />
-                Add Another Batch
-              </button>
-
-              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  Create {batchForms.length} Batch{batchForms.length > 1 ? 'es' : ''}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal for Dispose Reason */}
       {isDisposeModalOpen && selectedBatch && (
@@ -556,10 +282,10 @@ const InventoryManagement = () => {
                   <strong>Product:</strong> {selectedBatch.product_name}
                 </p>
                 <p className="text-sm text-gray-600">
-                  <strong>Quantity:</strong> {selectedBatch.quantity}
+                  <strong>Quantity:</strong> {selectedBatch.inventory_quantity || 0}
                 </p>
                 <p className="text-sm text-gray-600">
-                  <strong>Status:</strong> {selectedBatch.status}
+                  <strong>Status:</strong> {selectedBatch.inventory_status || '-'}
                 </p>
               </div>
 

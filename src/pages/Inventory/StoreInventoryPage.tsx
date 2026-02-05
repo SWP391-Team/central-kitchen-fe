@@ -76,7 +76,7 @@ const StoreInventoryPage = () => {
   };
 
   const handleDispose = async (batch: ProductBatchWithDetails) => {
-    if (batch.status === 'DISPOSED') {
+    if (batch.inventory_status === 'DISPOSED') {
       showToast('Batch is already disposed', 'error');
       return;
     }
@@ -88,7 +88,7 @@ const StoreInventoryPage = () => {
 
     setSelectedBatch(batch);
 
-    if (batch.status === 'EXPIRED') {
+    if (batch.inventory_status === 'EXPIRED') {
       if (!window.confirm(`Are you sure you want to dispose batch #${batch.batch_id}?`)) {
         return;
       }
@@ -246,24 +246,24 @@ const StoreInventoryPage = () => {
                     {batch.product_code || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                    {batch.quantity}
+                    {batch.inventory_quantity}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {batch.unit}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(batch.production_date)}
+                    {batch.production_date ? formatDate(batch.production_date) : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDate(batch.expired_date)}
+                    {batch.expired_date ? formatDate(batch.expired_date) : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={getStatusBadgeClass(batch.status)}>
-                      {getStatusText(batch.status)}
+                    <span className={getStatusBadgeClass(batch.inventory_status || '')}>
+                      {getStatusText(batch.inventory_status || '')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {batch.status !== 'DISPOSED' && (
+                    {batch.inventory_status !== 'DISPOSED' && (
                       <button
                         onClick={() => handleDispose(batch)}
                         className="text-red-600 hover:text-red-900 font-medium"
@@ -290,7 +290,7 @@ const StoreInventoryPage = () => {
           <div>
             <span className="text-blue-700">Total Items:</span>
             <span className="ml-2 font-semibold text-blue-900">
-              {batches.reduce((sum, batch) => sum + batch.quantity, 0)}
+              {batches.reduce((sum, batch) => sum + (batch.inventory_quantity || 0), 0)}
             </span>
           </div>
         </div>
@@ -321,7 +321,7 @@ const StoreInventoryPage = () => {
                 Product: <span className="font-semibold">{selectedBatch.product_name}</span>
               </p>
               <p className="text-sm text-gray-600">
-                Quantity: <span className="font-semibold">{selectedBatch.quantity} {selectedBatch.unit}</span>
+                Quantity: <span className="font-semibold">{selectedBatch.inventory_quantity} {selectedBatch.unit}</span>
               </p>
             </div>
 

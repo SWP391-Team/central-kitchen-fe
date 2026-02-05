@@ -8,6 +8,7 @@ import StoreInventoryPage from '@/pages/Inventory/StoreInventoryPage'
 import SupplyOrderStorePage from '@/pages/SupplyOrder/SupplyOrderStorePage'
 import SupplyOrderCentralKitchenPage from '@/pages/SupplyOrder/SupplyOrderCentralKitchenPage'
 import CustomerOrderPage from '@/pages/CustomerOrder/CustomerOrderPage'
+import KitchenProductionPage from '@/pages/KitchenProduction/KitchenProductionPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
 import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
@@ -77,6 +78,12 @@ const AppRouter = () => {
         <Route 
           path="/supply-order/central-kitchen" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><SupplyOrderCentralKitchenPage /></ProtectedRoute>} 
+        />
+        
+        {/* Kitchen Production - Admin, Central_Staff */}
+        <Route 
+          path="/kitchen-production" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><KitchenProductionPage /></ProtectedRoute>} 
         />
         
         {/* Customer Order - Admin, Store_Staff */}
