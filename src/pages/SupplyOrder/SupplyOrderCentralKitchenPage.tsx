@@ -21,6 +21,7 @@ const SupplyOrderCentralKitchenPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SupplyOrderDetailResponse | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState>({});
   const [approveAll, setApproveAll] = useState(false);
@@ -56,6 +57,16 @@ const SupplyOrderCentralKitchenPage = () => {
       setApproveAll(false);
       setRejectAll(false);
       setShowReviewModal(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load order details');
+    }
+  };
+
+  const handleViewDetails = async (orderId: number) => {
+    try {
+      const data = await supplyOrderService.getSupplyOrderByIdCentral(orderId);
+      setSelectedOrder(data);
+      setShowDetailModal(true);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load order details');
     }
@@ -293,6 +304,13 @@ const SupplyOrderCentralKitchenPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => handleViewDetails(order.supply_order_id)}
+                        className="text-blue-600 hover:text-blue-900 flex items-center space-x-1"
+                      >
+                        <EyeIcon className="w-4 h-4" />
+                        <span>View</span>
+                      </button>
                       {isCentralStaff && order.status === 'SUBMITTED' && (
                         <button
                           onClick={() => handleReviewOrder(order.supply_order_id)}
@@ -311,7 +329,6 @@ const SupplyOrderCentralKitchenPage = () => {
                           <span>Start Delivery</span>
                         </button>
                       )}
-                      {isAdmin && <span className="text-gray-400">View Only</span>}
                     </div>
                   </td>
                 </tr>
@@ -466,6 +483,121 @@ const SupplyOrderCentralKitchenPage = () => {
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Modal */}
+      {showDetailModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Supply Order Details</h2>
+              <button
+                onClick={() => {
+                  setShowDetailModal(false);
+                  setSelectedOrder(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <p className="text-sm text-gray-600">Order ID</p>
+                <p className="text-lg font-semibold">#{selectedOrder.supply_order_id}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Supply Order Code</p>
+                <p className="text-lg font-bold text-indigo-700">{selectedOrder.supply_order_code}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Status</p>
+                <span className={getStatusBadgeClass(selectedOrder.status)}>
+                  {getStatusText(selectedOrder.status)}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Store</p>
+                <p className="text-lg font-semibold">
+                  {selectedOrder.store_name || `Store ${selectedOrder.store_id}`}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Created By</p>
+                <p className="text-lg font-semibold">
+                  {selectedOrder.created_by_username || `User ${selectedOrder.created_by}`}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Created At</p>
+                <p className="text-lg font-semibold">{formatDate(selectedOrder.created_at)}</p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items</h3>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Product Code
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Product
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Unit
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Requested Qty
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Approved Qty
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {selectedOrder.items.map((item) => (
+                    <tr key={item.supply_order_item_id}>
+                      <td className="px-4 py-3 text-sm font-bold text-blue-700">
+                        {item.product_code || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {item.product_name || `Product ${item.product_id}`}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                        {item.requested_quantity}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                        {item.approved_quantity ?? '-'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {item.status || 'Pending'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6">
+              <button
+                onClick={() => {
+                  setShowDetailModal(false);
+                  setSelectedOrder(null);
+                }}
+                className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Close
               </button>
             </div>
           </div>

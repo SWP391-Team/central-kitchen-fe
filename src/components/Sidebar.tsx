@@ -7,7 +7,6 @@ import {
   HomeIcon,
   CubeIcon,
   TruckIcon,
-  ShoppingCartIcon,
   UsersIcon,
   BuildingStorefrontIcon,
   DocumentTextIcon,
@@ -15,6 +14,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ArchiveBoxIcon,
+  FireIcon,
 } from '@heroicons/react/24/outline';
 
 interface SubMenuItem {
@@ -40,24 +40,6 @@ const menuItems: MenuItem[] = [
     roles: [1, 2, 3],
   },
   {
-    name: 'Inventory',
-    path: '/inventory',
-    icon: CubeIcon,
-    roles: [1, 2, 3], 
-    subItems: [
-      {
-        name: 'Central Kitchen Inventory',
-        path: '/inventory/store/1',
-        roles: [1, 2], 
-      },
-      {
-        name: 'My Store Inventory',
-        path: '/inventory/store/:storeId', 
-        roles: [3], 
-      },
-    ],
-  },
-  {
     name: 'Supply Order',
     path: '/supply-order',
     icon: TruckIcon,
@@ -76,10 +58,28 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    name: 'Customer Order',
-    path: '/customer-order',
-    icon: ShoppingCartIcon,
-    roles: [1, 3], 
+    name: 'Kitchen Production',
+    path: '/kitchen-production',
+    icon: FireIcon,
+    roles: [1, 2],
+  },
+  {
+    name: 'Inventory',
+    path: '/inventory',
+    icon: CubeIcon,
+    roles: [1, 2, 3], 
+    subItems: [
+      {
+        name: 'Central Kitchen Inventory',
+        path: '/inventory/store/1',
+        roles: [1, 2], 
+      },
+      {
+        name: 'My Store Inventory',
+        path: '/inventory/store/:storeId', 
+        roles: [3], 
+      },
+    ],
   },
   {
     name: 'Product Management',
@@ -88,15 +88,15 @@ const menuItems: MenuItem[] = [
     roles: [1, 2], 
   },
   {
-    name: 'User Management',
-    path: '/users',
-    icon: UsersIcon,
-    roles: [1], 
-  },
-  {
     name: 'Store Management',
     path: '/stores',
     icon: BuildingStorefrontIcon,
+    roles: [1], 
+  },
+  {
+    name: 'User Management',
+    path: '/users',
+    icon: UsersIcon,
     roles: [1], 
   },
   {
@@ -161,11 +161,13 @@ const Sidebar = () => {
     if (user.role_id === 1 && openDropdown === 'Inventory') {
       const filteredWithoutMyStore = filtered.filter(item => !item.path.includes('/inventory/store/'));
       
-      const storeItems: SubMenuItem[] = stores.map(store => ({
-        name: store.store_name,
-        path: `/inventory/store/${store.store_id}`,
-        roles: [1], 
-      }));
+      const storeItems: SubMenuItem[] = stores
+        .sort((a, b) => a.store_id - b.store_id)
+        .map(store => ({
+          name: store.store_name,
+          path: `/inventory/store/${store.store_id}`,
+          roles: [1], 
+        }));
 
       return [...filteredWithoutMyStore, ...storeItems];
     }
@@ -225,9 +227,10 @@ const Sidebar = () => {
             const filteredSubItems = filterSubItems(item.subItems);
             const hasSubItems = filteredSubItems.length > 0;
             const isDropdownOpen = openDropdown === item.name;
-            const isSubItemActive = filteredSubItems.some(
-              (subItem) => location.pathname === subItem.path
-            );
+            
+            const isSubItemActive = hasSubItems && 
+              location.pathname.startsWith(item.path) &&
+              filteredSubItems.some((subItem) => location.pathname === subItem.path);
 
             return (
               <li key={item.path}>
@@ -252,7 +255,13 @@ const Sidebar = () => {
                       )}
                     </button>
                     {isDropdownOpen && (
-                      <ul className="mt-1 ml-4 space-y-1">
+                      <ul className="mt-1 ml-4 space-y-1 max-h-32 overflow-y-auto pr-2 
+                        [&::-webkit-scrollbar]:w-2
+                        [&::-webkit-scrollbar-track]:bg-gray-700
+                        [&::-webkit-scrollbar-track]:rounded-full
+                        [&::-webkit-scrollbar-thumb]:bg-gray-600
+                        [&::-webkit-scrollbar-thumb]:rounded-full
+                        [&::-webkit-scrollbar-thumb]:hover:bg-gray-500">
                         {filteredSubItems.map((subItem) => {
                           const isSubActive = location.pathname === subItem.path;
                           return (
