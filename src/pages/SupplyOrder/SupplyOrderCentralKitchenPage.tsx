@@ -540,53 +540,100 @@ const SupplyOrderCentralKitchenPage = () => {
             </div>
 
             <div className="border-t pt-4">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items</h3>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Product Code
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Product
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Unit
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Requested Qty
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Approved Qty
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {selectedOrder.items.map((item) => (
-                    <tr key={item.supply_order_item_id}>
-                      <td className="px-4 py-3 text-sm font-bold text-blue-700">
-                        {item.product_code || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {item.product_name || `Product ${item.product_id}`}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {item.requested_quantity}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {item.approved_quantity ?? '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {item.status || 'Pending'}
-                      </td>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items & Batch Allocations</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Product Code
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Product
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Unit
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Batch Code
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Requested Qty
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Approved Qty
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Status
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedOrder.items.map((item) => {
+                      const hasBatches = item.batches && item.batches.length > 0;
+                      
+                      if (!hasBatches) {
+                        return (
+                          <tr key={item.supply_order_item_id}>
+                            <td className="px-4 py-3 text-sm font-bold text-blue-700">
+                              {item.product_code || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {item.product_name || `Product ${item.product_id}`}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 italic">-</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                              {item.requested_quantity}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                              {item.approved_quantity ?? '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {item.status || 'Pending'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      
+                      // Show one row per batch
+                      return item.batches!.map((batch, batchIndex) => (
+                        <tr key={`${item.supply_order_item_id}-${batch.item_batch_id}`} className={batchIndex > 0 ? 'bg-gray-50' : ''}>
+                          {batchIndex === 0 ? (
+                            <>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm font-bold text-blue-700 border-r border-gray-200">
+                                {item.product_code || '-'}
+                              </td>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                {item.product_name || `Product ${item.product_id}`}
+                              </td>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                {item.unit || '-'}
+                              </td>
+                            </>
+                          ) : null}
+                          <td className="px-4 py-3 text-sm font-semibold text-purple-700">
+                            {batch.batch_code || `Batch ${batch.batch_id}`}
+                          </td>
+                          {batchIndex === 0 ? (
+                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 text-right border-l border-gray-200">
+                              {item.requested_quantity}
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                            {batch.quantity}
+                          </td>
+                          {batchIndex === 0 ? (
+                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-500 border-l border-gray-200">
+                              {item.status || 'Pending'}
+                            </td>
+                          ) : null}
+                        </tr>
+                      ));
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="mt-6">

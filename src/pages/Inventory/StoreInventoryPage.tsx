@@ -4,7 +4,15 @@ import { inventoryService } from '@/api/services/inventoryService';
 import { ProductBatchWithDetails } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, ArrowLeftIcon, ChevronDownIcon, ChevronUpIcon, EyeIcon } from '@heroicons/react/24/outline';
+
+interface GroupedProduct {
+  product_name: string;
+  product_code: string;
+  unit: string;
+  batches: ProductBatchWithDetails[];
+  totalQuantity: number;
+}
 
 const StoreInventoryPage = () => {
   const { storeId } = useParams<{ storeId: string }>();
@@ -15,6 +23,9 @@ const StoreInventoryPage = () => {
   const [isDisposeModalOpen, setIsDisposeModalOpen] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchWithDetails | null>(null);
   const [disposeReason, setDisposeReason] = useState<'WRONG_DATA' | 'DEFECTIVE' | ''>('');
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
   const { user } = useAuth();
 
@@ -148,6 +159,43 @@ const StoreInventoryPage = () => {
     return `Store (ID: ${numericStoreId})`;
   };
 
+  const groupBatchesByProduct = (): GroupedProduct[] => {
+    const grouped = batches.reduce((acc, batch) => {
+      const key = batch.product_name;
+      if (!acc[key]) {
+        acc[key] = {
+          product_name: batch.product_name,
+          product_code: batch.product_code || '-',
+          unit: batch.unit,
+          batches: [],
+          totalQuantity: 0,
+        };
+      }
+      acc[key].batches.push(batch);
+      acc[key].totalQuantity += batch.inventory_quantity || 0;
+      return acc;
+    }, {} as Record<string, GroupedProduct>);
+
+    return Object.values(grouped);
+  };
+
+  const toggleProductExpansion = (productName: string) => {
+    const newExpanded = new Set(expandedProducts);
+    if (newExpanded.has(productName)) {
+      newExpanded.delete(productName);
+    } else {
+      newExpanded.add(productName);
+    }
+    setExpandedProducts(newExpanded);
+  };
+
+  const handleViewDetail = (product: GroupedProduct) => {
+    setSelectedProduct(product);
+    setIsDetailModalOpen(true);
+  };
+
+  const groupedProducts = groupBatchesByProduct();
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -191,11 +239,8 @@ const StoreInventoryPage = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Batch ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Batch Code
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Product Name
@@ -204,19 +249,13 @@ const StoreInventoryPage = () => {
                 Product Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Quantity
+                Total Quantity
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Unit
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Production Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Expiry Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
+                Batches
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
@@ -224,56 +263,115 @@ const StoreInventoryPage = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {batches.length === 0 ? (
+            {groupedProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   No inventory batches found
                 </td>
               </tr>
             ) : (
-              batches.map((batch) => (
-                <tr key={batch.batch_id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #{batch.batch_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-700">
-                    {batch.batch_code || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {batch.product_name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {batch.product_code || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                    {batch.inventory_quantity}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {batch.unit}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {batch.production_date ? formatDate(batch.production_date) : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {batch.expired_date ? formatDate(batch.expired_date) : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={getStatusBadgeClass(batch.inventory_status || '')}>
-                      {getStatusText(batch.inventory_status || '')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    {batch.inventory_status !== 'DISPOSED' && (
-                      <button
-                        onClick={() => handleDispose(batch)}
-                        className="text-red-600 hover:text-red-900 font-medium"
-                      >
-                        Dispose
-                      </button>
+              groupedProducts.map((product) => {
+                const isExpanded = expandedProducts.has(product.product_name);
+                const visibleBatches = isExpanded ? product.batches : product.batches.slice(0, 0);
+                
+                return (
+                  <>
+                    <tr key={product.product_name} className="bg-gray-50 hover:bg-gray-100">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {product.batches.length >= 1 && (
+                          <button
+                            onClick={() => toggleProductExpansion(product.product_name)}
+                            className="text-gray-600 hover:text-gray-900"
+                          >
+                            {isExpanded ? (
+                              <ChevronUpIcon className="h-5 w-5" />
+                            ) : (
+                              <ChevronDownIcon className="h-5 w-5" />
+                            )}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {product.product_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.product_code}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">
+                        {product.totalQuantity}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.unit}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.batches.length} batch{product.batches.length > 1 ? 'es' : ''}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => handleViewDetail(product)}
+                          className="text-blue-600 hover:text-blue-900 font-medium flex items-center gap-1"
+                        >
+                          <EyeIcon className="h-4 w-4" />
+                          View Detail
+                        </button>
+                      </td>
+                    </tr>
+                    
+                    {/* Batch rows */}
+                    {product.batches.length > 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-0 py-0">
+                          <div className={`${product.batches.length > 3 && !isExpanded ? 'max-h-48 overflow-y-auto' : ''}`}>
+                            <table className="min-w-full">
+                              <tbody className="divide-y divide-gray-100">
+                                {visibleBatches.map((batch) => (
+                                  <tr key={batch.batch_id} className="bg-white hover:bg-gray-50">
+                                    <td className="w-12"></td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      Batch #{batch.batch_id}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-900 font-medium">
+                                      {batch.batch_code || '-'}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700 font-semibold">
+                                      {batch.inventory_quantity}
+                                    </td>
+                                    <td className="px-9 py-6 whitespace-nowrap text-xs text-gray-500">
+                                      {batch.unit}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      <div>Production Date: {batch.production_date ? formatDate(batch.production_date) : '-'}</div>
+                                      
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      <div>Expiry Date: {batch.expired_date ? formatDate(batch.expired_date) : '-'}</div>
+                                    </td>
+                                    <td className="px-6 py-3 whitespace-nowrap text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span className={getStatusBadgeClass(batch.inventory_status || '')}>
+                                          {getStatusText(batch.inventory_status || '')}
+                                        </span>
+                                        {batch.inventory_status !== 'DISPOSED' && (
+                                          <button
+                                            onClick={() => handleDispose(batch)}
+                                            className="text-red-600 hover:text-red-900 font-medium"
+                                          >
+                                            Dispose
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))
+                  </>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -363,6 +461,139 @@ const StoreInventoryPage = () => {
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Dispose
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Detail Modal */}
+      {isDetailModalOpen && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {selectedProduct.product_name}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Product Code: {selectedProduct.product_code} | Total Quantity: {selectedProduct.totalQuantity} {selectedProduct.unit}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDetailModalOpen(false);
+                  setSelectedProduct(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-gray-900 mb-2">Summary</h4>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Total Batches:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{selectedProduct.batches.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Total Quantity:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{selectedProduct.totalQuantity} {selectedProduct.unit}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Active Batches:</span>
+                    <span className="ml-2 font-semibold text-gray-900">
+                      {selectedProduct.batches.filter(b => b.inventory_status === 'ACTIVE').length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Batch ID
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Batch Code
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Quantity
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Production Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expiry Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedProduct.batches.map((batch) => (
+                      <tr key={batch.batch_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          #{batch.batch_id}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
+                          {batch.batch_code || '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                          {batch.inventory_quantity} {batch.unit}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {batch.production_date ? formatDate(batch.production_date) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {batch.expired_date ? formatDate(batch.expired_date) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={getStatusBadgeClass(batch.inventory_status || '')}>
+                            {getStatusText(batch.inventory_status || '')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          {batch.inventory_status !== 'DISPOSED' && (
+                            <button
+                              onClick={() => {
+                                setIsDetailModalOpen(false);
+                                handleDispose(batch);
+                              }}
+                              className="text-red-600 hover:text-red-900 font-medium"
+                            >
+                              Dispose
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setIsDetailModalOpen(false);
+                  setSelectedProduct(null);
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Close
               </button>
             </div>
           </div>

@@ -5,6 +5,16 @@ import { ProductBatchWithDetails, ProductBatchCreateRequest, BatchStatus } from 
 import { Product } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import Button from '@/components/Button';
+import { XMarkIcon, ChevronDownIcon, ChevronUpIcon, EyeIcon } from '@heroicons/react/24/outline';
+
+interface GroupedProduct {
+  product_name: string;
+  product_code: string;
+  unit: string;
+  batches: ProductBatchWithDetails[];
+  totalPlannedQty: number;
+  totalProducedQty: number;
+}
 
 const KitchenProductionPage = () => {
   const { showToast } = useToast();
@@ -15,6 +25,9 @@ const KitchenProductionPage = () => {
   const [showProduceModal, setShowProduceModal] = useState(false);
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<ProductBatchWithDetails | null>(null);
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<GroupedProduct | null>(null);
 
   // Form states
   const [batchPlans, setBatchPlans] = useState<ProductBatchCreateRequest[]>([
@@ -166,6 +179,53 @@ const KitchenProductionPage = () => {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const groupBatchesByProduct = (): GroupedProduct[] => {
+    const grouped = batches.reduce((acc, batch) => {
+      const key = batch.product_name;
+      if (!acc[key]) {
+        acc[key] = {
+          product_name: batch.product_name,
+          product_code: batch.product_code || '-',
+          unit: batch.unit,
+          batches: [],
+          totalPlannedQty: 0,
+          totalProducedQty: 0,
+        };
+      }
+      acc[key].batches.push(batch);
+      acc[key].totalPlannedQty += batch.planned_quantity || 0;
+      acc[key].totalProducedQty += batch.produced_quantity || 0;
+      return acc;
+    }, {} as Record<string, GroupedProduct>);
+
+    return Object.values(grouped);
+  };
+
+  const toggleProductExpansion = (productName: string) => {
+    const newExpanded = new Set(expandedProducts);
+    if (newExpanded.has(productName)) {
+      newExpanded.delete(productName);
+    } else {
+      newExpanded.add(productName);
+    }
+    setExpandedProducts(newExpanded);
+  };
+
+  const handleViewDetail = (product: GroupedProduct) => {
+    setSelectedProduct(product);
+    setIsDetailModalOpen(true);
+  };
+
+  const groupedProducts = groupBatchesByProduct();
+
   if (loading) {
     return <div className="flex justify-center items-center h-64">Loading...</div>;
   }
@@ -184,75 +244,169 @@ const KitchenProductionPage = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Planned Qty</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Production Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expired Date</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Product Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Product Code
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Total Planned Qty
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Total Produced Qty
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Unit
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Batches
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {batches.map((batch) => (
-              <tr key={batch.batch_id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{batch.batch_code}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{batch.product_name}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(batch.status)}`}>
-                    {batch.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{batch.planned_quantity} {batch.unit}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {batch.produced_quantity ? `${batch.produced_quantity} ${batch.unit}` : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {batch.production_date ? new Date(batch.production_date).toLocaleDateString() : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {batch.expired_date ? new Date(batch.expired_date).toLocaleDateString() : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
-                  {batch.status === 'PLANNED' && (
-                    <>
-                      <button
-                        onClick={() => handleOpenProduceModal(batch)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Produce
-                      </button>
-                      <button
-                        onClick={() => handleCancelBatch(batch.batch_id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                  {batch.status === 'PRODUCED' && (
-                    <>
-                      <button
-                        onClick={() => handleOpenStockModal(batch)}
-                        className="text-green-600 hover:text-green-800"
-                      >
-                        Stock
-                      </button>
-                      <button
-                        onClick={() => handleCancelBatch(batch.batch_id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                  {(batch.status === 'STOCKED' || batch.status === 'CANCELLED') && (
-                    <span className="text-gray-400">-</span>
-                  )}
+            {groupedProducts.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                  No batch plans found
                 </td>
               </tr>
-            ))}
+            ) : (
+              groupedProducts.map((product) => {
+                const isExpanded = expandedProducts.has(product.product_name);
+                const visibleBatches = isExpanded ? product.batches : product.batches.slice(0, 0);
+
+                return (
+                  <>
+                    <tr key={product.product_name} className="bg-gray-50 hover:bg-gray-100">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {product.batches.length >= 1 && (
+                          <button
+                            onClick={() => toggleProductExpansion(product.product_name)}
+                            className="text-gray-600 hover:text-gray-900"
+                          >
+                            {isExpanded ? (
+                              <ChevronUpIcon className="h-5 w-5" />
+                            ) : (
+                              <ChevronDownIcon className="h-5 w-5" />
+                            )}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {product.product_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.product_code}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">
+                        {product.totalPlannedQty}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-bold">
+                        {product.totalProducedQty}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.unit}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.batches.length} batch{product.batches.length > 1 ? 'es' : ''}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <button
+                          onClick={() => handleViewDetail(product)}
+                          className="text-blue-600 hover:text-blue-900 font-medium flex items-center gap-1"
+                        >
+                          <EyeIcon className="h-4 w-4" />
+                          View Detail
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* Batch rows */}
+                    {product.batches.length > 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-0 py-0">
+                          <div className={`${product.batches.length > 3 && !isExpanded ? 'max-h-48 overflow-y-auto' : ''}`}>
+                            <table className="min-w-full">
+                              <tbody className="divide-y divide-gray-100">
+                                {visibleBatches.map((batch) => (
+                                  <tr key={batch.batch_id} className="bg-white hover:bg-gray-50">
+                                    <td className="w-12"></td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      Batch Code: {batch.batch_code}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700 font-semibold">
+                                      Planned: {batch.planned_quantity} {batch.unit}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-700 font-semibold">
+                                      Produced: {batch.produced_quantity ? `${batch.produced_quantity} ${batch.unit}` : '-'}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      Production: {batch.production_date ? formatDate(batch.production_date) : '-'}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-xs text-gray-500">
+                                      Expiry: {batch.expired_date ? formatDate(batch.expired_date) : '-'}
+                                    </td>
+                                    <td className="px-6 py-3 whitespace-nowrap text-xs">
+                                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(batch.status)}`}>
+                                        {batch.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-3 whitespace-nowrap text-xs space-x-2">
+                                      {batch.status === 'PLANNED' && (
+                                        <>
+                                          <button
+                                            onClick={() => handleOpenProduceModal(batch)}
+                                            className="text-blue-600 hover:text-blue-800 font-medium"
+                                          >
+                                            Produce
+                                          </button>
+                                          <button
+                                            onClick={() => handleCancelBatch(batch.batch_id)}
+                                            className="text-red-600 hover:text-red-800 font-medium"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </>
+                                      )}
+                                      {batch.status === 'PRODUCED' && (
+                                        <>
+                                          <button
+                                            onClick={() => handleOpenStockModal(batch)}
+                                            className="text-green-600 hover:text-green-800 font-medium"
+                                          >
+                                            Stock
+                                          </button>
+                                          <button
+                                            onClick={() => handleCancelBatch(batch.batch_id)}
+                                            className="text-red-600 hover:text-red-800 font-medium"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </>
+                                      )}
+                                      {(batch.status === 'STOCKED' || batch.status === 'CANCELLED') && (
+                                        <span className="text-gray-400">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -422,6 +576,179 @@ const KitchenProductionPage = () => {
               <Button onClick={handleStockBatch}>
                 Stock
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Detail Modal */}
+      {isDetailModalOpen && selectedProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {selectedProduct.product_name}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Product Code: {selectedProduct.product_code} | Total Planned: {selectedProduct.totalPlannedQty} {selectedProduct.unit} | Total Produced: {selectedProduct.totalProducedQty} {selectedProduct.unit}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDetailModalOpen(false);
+                  setSelectedProduct(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-gray-900 mb-2">Summary</h4>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Total Batches:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{selectedProduct.batches.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Total Planned Qty:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{selectedProduct.totalPlannedQty} {selectedProduct.unit}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Total Produced Qty:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{selectedProduct.totalProducedQty} {selectedProduct.unit}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Active Batches:</span>
+                    <span className="ml-2 font-semibold text-gray-900">
+                      {selectedProduct.batches.filter(b => b.status === 'PLANNED' || b.status === 'PRODUCED').length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Batch Code
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Planned Qty
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Produced Qty
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Production Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Expiry Date
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedProduct.batches.map((batch) => (
+                      <tr key={batch.batch_id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {batch.batch_code}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(batch.status)}`}>
+                            {batch.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                          {batch.planned_quantity} {batch.unit}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                          {batch.produced_quantity ? `${batch.produced_quantity} ${batch.unit}` : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {batch.production_date ? formatDate(batch.production_date) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {batch.expired_date ? formatDate(batch.expired_date) : '-'}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm space-x-2">
+                          {batch.status === 'PLANNED' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setIsDetailModalOpen(false);
+                                  handleOpenProduceModal(batch);
+                                }}
+                                className="text-blue-600 hover:text-blue-900 font-medium"
+                              >
+                                Produce
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsDetailModalOpen(false);
+                                  handleCancelBatch(batch.batch_id);
+                                }}
+                                className="text-red-600 hover:text-red-900 font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {batch.status === 'PRODUCED' && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setIsDetailModalOpen(false);
+                                  handleOpenStockModal(batch);
+                                }}
+                                className="text-green-600 hover:text-green-900 font-medium"
+                              >
+                                Stock
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsDetailModalOpen(false);
+                                  handleCancelBatch(batch.batch_id);
+                                }}
+                                className="text-red-600 hover:text-red-900 font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          {(batch.status === 'STOCKED' || batch.status === 'CANCELLED') && (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setIsDetailModalOpen(false);
+                  setSelectedProduct(null);
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

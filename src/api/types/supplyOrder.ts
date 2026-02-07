@@ -4,13 +4,28 @@ export type SupplyOrderStatus =
   | 'PARTLY_APPROVED' 
   | 'REJECTED' 
   | 'DELIVERING' 
-  | 'DELIVERED';
+  | 'RECEIPTED'
+  | 'STOCKED'
+  | 'CANCELLED';
 
 export type SupplyOrderItemStatus = 
   | 'PENDING'
   | 'APPROVED'
   | 'PARTLY_APPROVED'
   | 'REJECTED';
+
+export interface SupplyOrderItemBatch {
+  item_batch_id: number;
+  supply_order_item_id: number;
+  batch_id: number;
+  inventory_id: number;
+  quantity: number; 
+  receipted_quantity: number | null;
+  stocked_quantity: number | null;
+  created_at: string;
+  batch_code?: string;
+  product_name?: string;
+}
 
 export interface SupplyOrderItem {
   supply_order_item_id: number;
@@ -23,6 +38,7 @@ export interface SupplyOrderItem {
   product_name?: string;
   unit?: string;
   available_quantity?: number;
+  batches?: SupplyOrderItemBatch[];
 }
 
 export interface SupplyOrder {
@@ -59,4 +75,22 @@ export interface ReviewItemRequest {
 
 export interface ReviewSupplyOrderRequest {
   items: ReviewItemRequest[];
+}
+
+export interface ConfirmReceivedBatchRequest {
+  item_batch_id: number;
+  receipted_quantity: number;
+}
+
+export interface ConfirmReceivedRequest {
+  batches: ConfirmReceivedBatchRequest[];
+}
+
+export interface StockBatchRequest {
+  item_batch_id: number;
+  stocked_quantity: number;
+}
+
+export interface StockSupplyOrderRequest {
+  batches: StockBatchRequest[];
 }

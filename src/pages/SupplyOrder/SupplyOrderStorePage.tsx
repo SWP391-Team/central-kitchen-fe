@@ -29,6 +29,10 @@ const SupplyOrderStorePage = () => {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{ product_id: 0, requested_quantity: 1 }]);
   const [confirmingReceived, setConfirmingReceived] = useState<number | null>(null);
   const [supplyOrderCode, setSupplyOrderCode] = useState('');
+  const [showConfirmReceivedModal, setShowConfirmReceivedModal] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [receiptedQuantities, setReceiptedQuantities] = useState<{ [key: number]: number }>({});
+  const [stockedQuantities, setStockedQuantities] = useState<{ [key: number]: number }>({});
 
   useEffect(() => {
     loadOrders();
@@ -135,22 +139,120 @@ const SupplyOrderStorePage = () => {
     }
   };
 
-  const handleConfirmReceived = async (orderId: number) => {
-    if (!window.confirm('Confirm that you have received this order? Inventory will be updated.')) {
+  const handleOpenConfirmReceivedModal = async (orderId: number) => {
+    try {
+      const data = await supplyOrderService.getSupplyOrderById(orderId);
+      setSelectedOrder(data);
+      
+      const initialQuantities: { [key: number]: number } = {};
+      data.items.forEach(item => {
+        if (item.batches && item.batches.length > 0) {
+          item.batches.forEach(batch => {
+            initialQuantities[batch.item_batch_id] = batch.quantity;
+          });
+        }
+      });
+      setReceiptedQuantities(initialQuantities);
+      setShowConfirmReceivedModal(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load order details');
+    }
+  };
+
+  const handleConfirmReceived = async () => {
+    if (!selectedOrder) return;
+
+    try {
+      setConfirmingReceived(selectedOrder.supply_order_id);
+      setError('');
+      
+      const batches = Object.entries(receiptedQuantities).map(([batchId, quantity]) => ({
+        item_batch_id: parseInt(batchId),
+        receipted_quantity: quantity
+      }));
+
+      await supplyOrderService.confirmReceived(selectedOrder.supply_order_id, { batches });
+      setShowConfirmReceivedModal(false);
+      setSelectedOrder(null);
+      setReceiptedQuantities({});
+      await loadOrders();
+      alert('Order confirmed as received successfully!');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to confirm received');
+    } finally {
+      setConfirmingReceived(null);
+    }
+  };
+
+  const handleOpenStockModal = async (orderId: number) => {
+    try {
+      const data = await supplyOrderService.getSupplyOrderById(orderId);
+      
+      const hasReceiptedBatches = data.items.some(item => 
+        item.batches && item.batches.some(batch => 
+          batch.receipted_quantity && batch.receipted_quantity > 0
+        )
+      );
+      
+      if (!hasReceiptedBatches) {
+        setError('Cannot stock this order: No batches with receipted quantity > 0');
+        alert('Cannot stock this order: No items were received (receipted quantity = 0)');
+        return;
+      }
+      
+      setSelectedOrder(data);
+      
+      const initialQuantities: { [key: number]: number } = {};
+      data.items.forEach(item => {
+        if (item.batches && item.batches.length > 0) {
+          item.batches.forEach(batch => {
+            if (batch.receipted_quantity && batch.receipted_quantity > 0) {
+              initialQuantities[batch.item_batch_id] = batch.receipted_quantity;
+            }
+          });
+        }
+      });
+      setStockedQuantities(initialQuantities);
+      setShowStockModal(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load order details');
+    }
+  };
+
+  const handleStock = async () => {
+    if (!selectedOrder) return;
+
+    try {
+      setError('');
+      
+      const batches = Object.entries(stockedQuantities).map(([batchId, quantity]) => ({
+        item_batch_id: parseInt(batchId),
+        stocked_quantity: quantity
+      }));
+
+      await supplyOrderService.stockSupplyOrder(selectedOrder.supply_order_id, { batches });
+      setShowStockModal(false);
+      setSelectedOrder(null);
+      setStockedQuantities({});
+      await loadOrders();
+      alert('Order stocked successfully!');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to stock order');
+    }
+  };
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!window.confirm('Are you sure you want to cancel this order?')) {
       return;
     }
 
     try {
-      setConfirmingReceived(orderId);
       setError('');
-      await supplyOrderService.confirmReceived(orderId);
-      await loadOrders(); 
-      alert('Order confirmed as received and inventory updated successfully!');
+      await supplyOrderService.cancelSupplyOrder(orderId);
+      await loadOrders();
+      alert('Order cancelled successfully!');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to confirm received');
-      alert(err.response?.data?.message || 'Failed to confirm received');
-    } finally {
-      setConfirmingReceived(null);
+      setError(err.response?.data?.message || 'Failed to cancel order');
     }
   };
 
@@ -167,7 +269,11 @@ const SupplyOrderStorePage = () => {
         return `${baseClass} bg-red-100 text-red-800`;
       case 'DELIVERING':
         return `${baseClass} bg-purple-100 text-purple-800`;
-      case 'DELIVERED':
+      case 'RECEIPTED':
+        return `${baseClass} bg-indigo-100 text-indigo-800`;
+      case 'STOCKED':
+        return `${baseClass} bg-teal-100 text-teal-800`;
+      case 'CANCELLED':
         return `${baseClass} bg-gray-100 text-gray-800`;
       default:
         return `${baseClass} bg-gray-100 text-gray-800`;
@@ -181,7 +287,9 @@ const SupplyOrderStorePage = () => {
       case 'PARTLY_APPROVED': return 'Partly Approved';
       case 'REJECTED': return 'Rejected';
       case 'DELIVERING': return 'Delivering';
-      case 'DELIVERED': return 'Delivered';
+      case 'RECEIPTED': return 'Receipted';
+      case 'STOCKED': return 'Stocked';
+      case 'CANCELLED': return 'Cancelled';
       default: return status;
     }
   };
@@ -301,11 +409,28 @@ const SupplyOrderStorePage = () => {
                       </button>
                       {isStoreStaff && order.status === 'DELIVERING' && (
                         <button
-                          onClick={() => handleConfirmReceived(order.supply_order_id)}
-                          disabled={confirmingReceived === order.supply_order_id}
-                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-xs font-semibold"
+                          onClick={() => handleOpenConfirmReceivedModal(order.supply_order_id)}
+                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
                         >
-                          {confirmingReceived === order.supply_order_id ? 'Processing...' : 'Confirm Received'}
+                          Confirm Received
+                        </button>
+                      )}
+                      {isStoreStaff && order.status === 'RECEIPTED' && order.items && order.items.some(item => 
+                        item.batches && item.batches.some(batch => batch.receipted_quantity && batch.receipted_quantity > 0)
+                      ) && (
+                        <button
+                          onClick={() => handleOpenStockModal(order.supply_order_id)}
+                          className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold"
+                        >
+                          Stock
+                        </button>
+                      )}
+                      {isStoreStaff && (order.status === 'APPROVED' || order.status === 'PARTLY_APPROVED') && (
+                        <button
+                          onClick={() => handleCancelOrder(order.supply_order_id)}
+                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
+                        >
+                          Cancel
                         </button>
                       )}
                     </div>
@@ -492,53 +617,119 @@ const SupplyOrderStorePage = () => {
             </div>
 
             <div className="border-t pt-4">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items</h3>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Product Code
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Product
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Unit
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Requested Qty
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Approved Qty
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {selectedOrder.items.map((item) => (
-                    <tr key={item.supply_order_item_id}>
-                      <td className="px-4 py-3 text-sm font-bold text-blue-700">
-                        {item.product_code || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {item.product_name || `Product ${item.product_id}`}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {item.requested_quantity}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                        {item.approved_quantity ?? '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {item.status || 'Pending'}
-                      </td>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">Order Items & Batch Allocations</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Product Code
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Product Name
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Unit
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Batch Code
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Requested Qty
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Approved Qty
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Receipted Qty
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Stocked Qty
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Status
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {selectedOrder.items.map((item) => {
+                      const hasBatches = item.batches && item.batches.length > 0;
+                      
+                      if (!hasBatches) {
+                        // Show item without batch breakdown
+                        return (
+                          <tr key={item.supply_order_item_id}>
+                            <td className="px-4 py-3 text-sm font-bold text-blue-700">
+                              {item.product_code || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {item.product_name || `Product ${item.product_id}`}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{item.unit || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-500 italic">-</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                              {item.requested_quantity}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">
+                              {item.approved_quantity ?? '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">-</td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right">-</td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {item.status || 'Pending'}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      
+                      // Show one row per batch
+                      return item.batches!.map((batch, batchIndex) => (
+                        <tr key={`${item.supply_order_item_id}-${batch.item_batch_id}`} className={batchIndex > 0 ? 'bg-gray-50' : ''}>
+                          {batchIndex === 0 ? (
+                            <>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm font-bold text-blue-700 border-r border-gray-200">
+                                {item.product_code || '-'}
+                              </td>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                {item.product_name || `Product ${item.product_id}`}
+                              </td>
+                              <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 border-r border-gray-200">
+                                {item.unit || '-'}
+                              </td>
+                            </>
+                          ) : null}
+                          <td className="px-4 py-3 text-sm font-semibold text-purple-700">
+                            {batch.batch_code || `Batch ${batch.batch_id}`}
+                          </td>
+                          {batchIndex === 0 ? (
+                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-900 text-right border-l border-gray-200">
+                              {item.requested_quantity}
+                            </td>
+                          ) : null}
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                            {batch.quantity}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            <span className={batch.receipted_quantity !== null && batch.receipted_quantity !== undefined ? 'font-semibold text-green-700' : 'text-gray-500'}>
+                              {batch.receipted_quantity ?? '-'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            <span className={batch.stocked_quantity !== null && batch.stocked_quantity !== undefined ? 'font-semibold text-indigo-700' : 'text-gray-500'}>
+                              {batch.stocked_quantity ?? '-'}
+                            </span>
+                          </td>
+                          {batchIndex === 0 ? (
+                            <td rowSpan={item.batches!.length} className="px-4 py-3 text-sm text-gray-500 border-l border-gray-200">
+                              {item.status || 'Pending'}
+                            </td>
+                          ) : null}
+                        </tr>
+                      ));
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="mt-6">
@@ -550,6 +741,223 @@ const SupplyOrderStorePage = () => {
                 className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Received Modal */}
+      {showConfirmReceivedModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Confirm Received</h2>
+              <button
+                onClick={() => {
+                  setShowConfirmReceivedModal(false);
+                  setSelectedOrder(null);
+                  setReceiptedQuantities({});
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-sm text-blue-800">
+                <strong>Supply Order:</strong> {selectedOrder.supply_order_code}
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                Enter the actual quantity received for each batch. This can be different from approved quantity due to shipping issues.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {selectedOrder.items
+                .filter(item => item.batches && item.batches.length > 0)
+                .map((item) => (
+                  <div key={item.supply_order_item_id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="mb-3 pb-2 border-b border-gray-300">
+                      <p className="font-bold text-gray-900 text-lg">{item.product_name}</p>
+                      <p className="text-sm text-gray-600">{item.product_code}</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {item.batches!.map((batch) => (
+                        <div key={batch.item_batch_id} className="p-3 bg-white rounded border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-semibold text-purple-700">{batch.batch_code || `Batch ${batch.batch_id}`}</p>
+                            </div>
+                            <p className="text-sm text-gray-600">
+                              Approved: <span className="font-semibold">{batch.quantity} {item.unit}</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <label className="text-sm font-medium text-gray-700 w-40">
+                              Receipted Quantity:
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max={batch.quantity}
+                              value={receiptedQuantities[batch.item_batch_id] || 0}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                const maxValue = batch.quantity;
+                                setReceiptedQuantities({
+                                  ...receiptedQuantities,
+                                  [batch.item_batch_id]: Math.min(value, maxValue)
+                                });
+                              }}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <span className="text-sm text-gray-600 w-16">{item.unit}</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Range: 0 - {batch.quantity} {item.unit}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={handleConfirmReceived}
+                disabled={confirmingReceived !== null}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {confirmingReceived ? 'Processing...' : 'Confirm Received'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmReceivedModal(false);
+                  setSelectedOrder(null);
+                  setReceiptedQuantities({});
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Modal */}
+      {showStockModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Stock to Inventory</h2>
+              <button
+                onClick={() => {
+                  setShowStockModal(false);
+                  setSelectedOrder(null);
+                  setStockedQuantities({});
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded">
+              <p className="text-sm text-indigo-800">
+                <strong>Supply Order:</strong> {selectedOrder.supply_order_code}
+              </p>
+              <p className="text-sm text-indigo-700 mt-1">
+                Enter the quantity to add to your store inventory per batch. This can be less than receipted if some items are damaged.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {selectedOrder.items
+                .filter(item => item.batches && item.batches.some(b => b.receipted_quantity && b.receipted_quantity > 0))
+                .map((item) => (
+                  <div key={item.supply_order_item_id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="mb-3 pb-2 border-b border-gray-300">
+                      <p className="font-bold text-gray-900 text-lg">{item.product_name}</p>
+                      <p className="text-sm text-gray-600">{item.product_code}</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {item.batches!
+                        .filter(batch => batch.receipted_quantity && batch.receipted_quantity > 0)
+                        .map((batch) => (
+                          <div key={batch.item_batch_id} className="p-3 bg-white rounded border border-gray-200">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-semibold text-purple-700">{batch.batch_code || `Batch ${batch.batch_id}`}</p>
+                              </div>
+                              <p className="text-sm text-gray-600">
+                                Receipted: <span className="font-semibold">{batch.receipted_quantity} {item.unit}</span>
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <label className="text-sm font-medium text-gray-700 w-40">
+                                Stocked Quantity:
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max={batch.receipted_quantity || 0}
+                                value={stockedQuantities[batch.item_batch_id] || 0}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value) || 0;
+                                  const maxValue = batch.receipted_quantity || 0;
+                                  setStockedQuantities({
+                                    ...stockedQuantities,
+                                    [batch.item_batch_id]: Math.min(value, maxValue)
+                                  });
+                                }}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                              />
+                              <span className="text-sm text-gray-600 w-16">{item.unit}</span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Range: 0 - {batch.receipted_quantity} {item.unit}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={handleStock}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Stock to Inventory
+              </button>
+              <button
+                onClick={() => {
+                  setShowStockModal(false);
+                  setSelectedOrder(null);
+                  setStockedQuantities({});
+                }}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
               </button>
             </div>
           </div>

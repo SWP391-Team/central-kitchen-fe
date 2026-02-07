@@ -4,6 +4,8 @@ import {
   SupplyOrderCreateRequest,
   SupplyOrderDetailResponse,
   ReviewSupplyOrderRequest,
+  ConfirmReceivedRequest,
+  StockSupplyOrderRequest,
   ApiResponse 
 } from '../types';
 
@@ -48,8 +50,23 @@ export const supplyOrderService = {
     return response.data.data;
   },
 
-  confirmReceived: async (id: number): Promise<SupplyOrderDetailResponse> => {
-    const response = await api.post<ApiResponse<SupplyOrderDetailResponse>>(`/supply-orders/store/${id}/confirm-received`);
+  confirmReceived: async (id: number, data: ConfirmReceivedRequest): Promise<SupplyOrderDetailResponse> => {
+    const response = await api.post<ApiResponse<SupplyOrderDetailResponse>>(`/supply-orders/store/${id}/confirm-received`, data);
+    return response.data.data;
+  },
+
+  stockSupplyOrder: async (id: number, data: StockSupplyOrderRequest): Promise<SupplyOrderDetailResponse> => {
+    const response = await api.post<ApiResponse<SupplyOrderDetailResponse>>(`/supply-orders/store/${id}/stock`, data);
+    return response.data.data;
+  },
+
+  cancelSupplyOrder: async (id: number): Promise<SupplyOrderDetailResponse> => {
+    const response = await api.post<ApiResponse<SupplyOrderDetailResponse>>(`/supply-orders/store/${id}/cancel`);
+    return response.data.data;
+  },
+
+  cancelSupplyOrderCentral: async (id: number): Promise<SupplyOrderDetailResponse> => {
+    const response = await api.post<ApiResponse<SupplyOrderDetailResponse>>(`/supply-orders/central/${id}/cancel`);
     return response.data.data;
   },
 };
