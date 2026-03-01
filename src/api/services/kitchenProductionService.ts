@@ -4,7 +4,7 @@ import {
   ProductBatchWithDetails, 
   ProductBatchCreateRequest, 
   ProduceBatchRequest, 
-  StockBatchRequest 
+  BatchStockRequest 
 } from '../types/productBatch';
 import { ApiResponse } from '../types';
 
@@ -24,7 +24,7 @@ export const kitchenProductionService = {
     return response.data;
   },
 
-  stockBatch: async (batchId: number, data: StockBatchRequest): Promise<ApiResponse<ProductBatch>> => {
+  stockBatch: async (batchId: number, data: BatchStockRequest): Promise<ApiResponse<ProductBatch>> => {
     const response = await api.post(`/kitchen-production/${batchId}/stock`, data);
     return response.data;
   },
