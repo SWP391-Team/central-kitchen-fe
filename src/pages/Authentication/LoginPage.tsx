@@ -23,6 +23,7 @@ const LoginPage = () => {
       
       login({
         user_id: response.user.user_id,
+        user_code: response.user.user_code,
         username: response.user.username,
         role_id: response.user.role_id,
         store_id: response.user.store_id,

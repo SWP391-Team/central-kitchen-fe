@@ -47,7 +47,7 @@ export interface ProduceBatchRequest {
   expired_date: string;
 }
 
-export interface StockBatchRequest {
+export interface BatchStockRequest {
   stocked_quantity: number;
 }
 
