@@ -97,26 +97,21 @@ const UserManagementPage = () => {
 
     try {
       if (editingUser) {
-        // Update existing user
         const updateData: UserUpdateRequest = { ...formData };
         if (!updateData.password) {
-          delete updateData.password; // Don't send empty password
+          delete updateData.password; 
         }
-        // Remove user_code from update data to prevent modification attempts
         delete (updateData as any).user_code;
         await userService.updateUser(editingUser.user_id, updateData);
       } else {
-        // Create new user - validate and format user_code
         const createData = { ...formData } as UserCreateRequest;
         
-        // Validate user_code format
         const userCodePattern = /^USR-\d{4}$/;
         if (!createData.user_code || !userCodePattern.test(createData.user_code.toUpperCase())) {
           setError('User code must be in format USR-XXXX (e.g., USR-0001)');
           return;
         }
         
-        // Convert to uppercase
         createData.user_code = createData.user_code.toUpperCase();
         
         await userService.createUser(createData);
@@ -173,7 +168,6 @@ const UserManagementPage = () => {
     return store ? store.store_address : '-';
   };
 
-  // Filter and sort users
   const filteredAndSortedUsers = users
     .filter(user => {
       const matchesSearch = searchTerm === '' || 
