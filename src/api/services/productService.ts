@@ -7,8 +7,12 @@ import {
 } from '../types';
 
 export const productService = {
-  getAllProducts: async (): Promise<Product[]> => {
-    const response = await api.get<ApiResponse<Product[]>>('/products');
+  getAllProducts: async (status?: 'all' | 'active' | 'inactive'): Promise<Product[]> => {
+    let url = '/products';
+    if (status && status !== 'all') {
+      url += `?status=${status}`;
+    }
+    const response = await api.get<ApiResponse<Product[]>>(url);
     return response.data.data;
   },
 

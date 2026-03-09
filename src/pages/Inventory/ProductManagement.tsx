@@ -8,19 +8,20 @@ const ProductManagement = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductCreateRequest>({
-    product_code: '',
     product_name: '',
     unit: '',
+    shelf_life_days: 0,
   });
   const { showToast } = useToast();
 
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const data = await productService.getAllProducts();
+      const data = await productService.getAllProducts(statusFilter);
       setProducts(data);
     } catch (error: any) {
       showToast('Failed to load products', 'error');
@@ -31,20 +32,23 @@ const ProductManagement = () => {
   };
 
   useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const handleSearch = async (term: string) => {
-    setSearchTerm(term);
-    if (term.trim()) {
-      try {
-        const data = await productService.searchProducts(term);
-        setProducts(data);
-      } catch (error) {
-        showToast('Failed to search products', 'error');
+    const timeoutId = setTimeout(() => {
+      if (searchTerm.trim()) {
+        handleSearchExecute(searchTerm);
+      } else {
+        loadProducts();
       }
-    } else {
-      loadProducts();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter]);
+
+  const handleSearchExecute = async (term: string) => {
+    try {
+      const data = await productService.searchProducts(term);
+      setProducts(data);
+    } catch (error) {
+      showToast('Failed to search products', 'error');
     }
   };
 
@@ -52,16 +56,16 @@ const ProductManagement = () => {
     if (product) {
       setEditingProduct(product);
       setFormData({
-        product_code: product.product_code,
         product_name: product.product_name,
         unit: product.unit,
+        shelf_life_days: product.shelf_life_days,
       });
     } else {
       setEditingProduct(null);
       setFormData({
-        product_code: '',
         product_name: '',
         unit: '',
+        shelf_life_days: 0,
       });
     }
     setIsModalOpen(true);
@@ -71,9 +75,9 @@ const ProductManagement = () => {
     setIsModalOpen(false);
     setEditingProduct(null);
     setFormData({
-      product_code: '',
       product_name: '',
       unit: '',
+      shelf_life_days: 0,
     });
   };
 
@@ -85,27 +89,28 @@ const ProductManagement = () => {
       return;
     }
 
+    // Validate shelf_life_days
+    if (!formData.shelf_life_days || formData.shelf_life_days <= 0) {
+      showToast('Shelf life must be greater than 0', 'error');
+      return;
+    }
+
+    if (!Number.isInteger(formData.shelf_life_days)) {
+      showToast('Shelf life must be an integer', 'error');
+      return;
+    }
+
     try {
       if (editingProduct) {
         const updateData: ProductUpdateRequest = {
           product_name: formData.product_name,
           unit: formData.unit,
+          shelf_life_days: formData.shelf_life_days,
         };
-        delete (updateData as any).product_code;
         await productService.updateProduct(editingProduct.product_id, updateData);
         showToast('Product updated successfully', 'success');
       } else {
-        const createData = { ...formData } as ProductCreateRequest;
-        
-        const productCodePattern = /^PRD-[A-Z0-9]{4}$/;
-        if (!createData.product_code || !productCodePattern.test(createData.product_code.toUpperCase())) {
-          showToast('Product code must be in format PRD-XXXX (e.g., PRD-0001)', 'error');
-          return;
-        }
-        
-        createData.product_code = createData.product_code.toUpperCase();
-        
-        await productService.createProduct(createData);
+        await productService.createProduct(formData);
         showToast('Product created successfully', 'success');
       }
       closeModal();
@@ -145,19 +150,32 @@ const ProductManagement = () => {
         </button>
       </div>
 
-      {/* Search */}
+      {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search products by code, name or unit..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Search products by code, name or unit..."
-            value={searchTerm}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -189,6 +207,9 @@ const ProductManagement = () => {
                   Unit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Shelf Life (days)
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -213,6 +234,9 @@ const ProductManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {product.unit}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {product.shelf_life_days}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
@@ -265,30 +289,6 @@ const ProductManagement = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Product Code *
-                </label>
-                <input
-                  type="text"
-                  value={formData.product_code}
-                  onChange={(e) => setFormData({ ...formData, product_code: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                  placeholder="PRD-0001"
-                  pattern="PRD-[A-Z0-9]{4}"
-                  title="Format: PRD-XXXX (e.g., PRD-0001)"
-                  required
-                  disabled={!!editingProduct}
-                  readOnly={!!editingProduct}
-                  style={editingProduct ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                />
-                {editingProduct && (
-                  <p className="text-xs text-gray-500 mt-1">⚠️ Product code cannot be modified after creation</p>
-                )}
-                {!editingProduct && (
-                  <p className="text-xs text-gray-500 mt-1">Format: PRD-XXXX (e.g., PRD-0001, PRD-0002)</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Product Name *
                 </label>
                 <input
@@ -312,6 +312,22 @@ const ProductManagement = () => {
                   placeholder="e.g., Kg"
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Shelf Life (days) *
+                </label>
+                <input
+                  type="number"
+                  value={formData.shelf_life_days || ''}
+                  onChange={(e) => setFormData({ ...formData, shelf_life_days: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., 7"
+                  min="1"
+                  step="1"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Number of days before the product expires</p>
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button

@@ -1,12 +1,8 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useState, useEffect } from 'react';
-import { storeService } from '@/api/services/storeService';
-import { Store } from '@/api/types';
+import { useState } from 'react';
 import {
   HomeIcon,
-  CubeIcon,
-  TruckIcon,
   UsersIcon,
   BuildingStorefrontIcon,
   DocumentTextIcon,
@@ -14,7 +10,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ArchiveBoxIcon,
-  FireIcon,
+  ClipboardDocumentListIcon,
+  CubeIcon,
 } from '@heroicons/react/24/outline';
 
 interface SubMenuItem {
@@ -40,46 +37,16 @@ const menuItems: MenuItem[] = [
     roles: [1, 2, 3],
   },
   {
-    name: 'Supply Order',
-    path: '/supply-order',
-    icon: TruckIcon,
-    roles: [1, 2, 3],
-    subItems: [
-      {
-        name: 'Supply Order Central Kitchen',
-        path: '/supply-order/central-kitchen',
-        roles: [1, 2], 
-      },
-      {
-        name: 'Supply Order Store',
-        path: '/supply-order/store',
-        roles: [1, 3], 
-      },
-    ],
-  },
-  {
-    name: 'Kitchen Production',
-    path: '/kitchen-production',
-    icon: FireIcon,
+    name: 'Production Plan',
+    path: '/production-plan',
+    icon: ClipboardDocumentListIcon,
     roles: [1, 2],
   },
   {
-    name: 'Inventory',
-    path: '/inventory',
+    name: 'Production Batch',
+    path: '/production-batch',
     icon: CubeIcon,
-    roles: [1, 2, 3], 
-    subItems: [
-      {
-        name: 'Central Kitchen Inventory',
-        path: '/inventory/store/1',
-        roles: [1, 2], 
-      },
-      {
-        name: 'My Store Inventory',
-        path: '/inventory/store/:storeId', 
-        roles: [3], 
-      },
-    ],
+    roles: [1, 2],
   },
   {
     name: 'Product Management',
@@ -112,22 +79,6 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [stores, setStores] = useState<Store[]>([]);
-
-  useEffect(() => {
-    if (user?.role_id === 1) {
-      loadStores();
-    }
-  }, [user]);
-
-  const loadStores = async () => {
-    try {
-      const response = await storeService.getStores({ is_active: true });
-      setStores(response.data || []);
-    } catch (error) {
-      console.error('Failed to load stores:', error);
-    }
-  };
 
   const handleLogout = () => {
     logout();
@@ -157,20 +108,6 @@ const Sidebar = () => {
       const hasRoleAccess = !subItem.roles || subItem.roles.includes(user.role_id);
       return hasRoleAccess;
     });
-
-    if (user.role_id === 1 && openDropdown === 'Inventory') {
-      const filteredWithoutMyStore = filtered.filter(item => !item.path.includes('/inventory/store/'));
-      
-      const storeItems: SubMenuItem[] = stores
-        .sort((a, b) => a.store_id - b.store_id)
-        .map(store => ({
-          name: store.store_name,
-          path: `/inventory/store/${store.store_id}`,
-          roles: [1], 
-        }));
-
-      return [...filteredWithoutMyStore, ...storeItems];
-    }
 
     return filtered;
   };

@@ -377,7 +377,7 @@ const UserManagementPage = () => {
                     user.role_id === 2 ? 'bg-blue-100 text-blue-800' :
                     'bg-green-100 text-green-800'
                   }`}>
-                    {user.role_id === 1 ? '👑' : user.role_id === 2 ? '💼' : '👤'} {getRoleName(user.role_id)}
+                    {user.role_id === 1 ? '' : user.role_id === 2 ? '' : ''} {getRoleName(user.role_id)}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -393,7 +393,7 @@ const UserManagementPage = () => {
                       user.is_active ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
                     }`}
                   >
-                    {user.is_active ? '✓ Active' : '✗ Inactive'}
+                    {user.is_active ? 'Active' : 'Inactive'}
                   </button>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -401,13 +401,13 @@ const UserManagementPage = () => {
                     onClick={() => handleOpenModal(user)}
                     className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold hover:underline"
                   >
-                    ✏️ Edit
+                    ✏️ 
                   </button>
                   <button
                     onClick={() => handleDelete(user.user_id)}
                     className="text-red-600 hover:text-red-900 font-semibold hover:underline"
                   >
-                    🗑️ Delete
+                    🗑️ 
                   </button>
                 </td>
               </tr>
@@ -439,7 +439,7 @@ const UserManagementPage = () => {
             <div className="p-6">
               {error && (
                 <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center">
-                  <span className="text-xl mr-2">⚠️</span>
+                  <span className="text-xl mr-2"></span>
                   <span>{error}</span>
                 </div>
               )}
@@ -447,7 +447,7 @@ const UserManagementPage = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">�</span>
+                    <span className="mr-2"></span>
                     User Code
                   </label>
                   <input
@@ -464,7 +464,7 @@ const UserManagementPage = () => {
                     style={editingUser ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                   />
                   {editingUser && (
-                    <p className="text-sm text-gray-500 mt-1">⚠️ User code cannot be modified after creation</p>
+                    <p className="text-sm text-gray-500 mt-1">User code cannot be modified after creation</p>
                   )}
                   {!editingUser && (
                     <p className="text-sm text-gray-500 mt-1">Format: USR-XXXX (e.g., USR-0001, USR-0002)</p>
@@ -473,7 +473,7 @@ const UserManagementPage = () => {
 
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">�👤</span>
+                    <span className="mr-2"></span>
                     Username
                   </label>
                   <input
@@ -488,7 +488,7 @@ const UserManagementPage = () => {
 
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">🔒</span>
+                    <span className="mr-2"></span>
                     Password {editingUser && <span className="text-sm text-gray-500 ml-2">(leave blank to keep current)</span>}
                   </label>
                   <input
@@ -503,7 +503,7 @@ const UserManagementPage = () => {
 
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">💼</span>
+                    <span className="mr-2"></span>
                     Role
                   </label>
                   <select
@@ -512,15 +512,15 @@ const UserManagementPage = () => {
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
                     required
                   >
-                    <option value={1}>👑 Admin</option>
-                    <option value={2}>💼 Central Staff</option>
-                    <option value={3}>👤 Store Staff</option>
+                    <option value={1}>Admin</option>
+                    <option value={2}>Central Staff</option>
+                    <option value={3}>Store Staff</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2">🏪</span>
+                    <span className="mr-2"></span>
                     Store <span className="text-sm text-gray-500 ml-2">(optional)</span>
                   </label>
                   <select
@@ -552,7 +552,7 @@ const UserManagementPage = () => {
                     type="submit"
                     className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
                   >
-                    {editingUser ? '💾 Update' : '➕ Create'}
+                    {editingUser ? 'Update' : 'Create'}
                   </button>
                 </div>
               </form>
