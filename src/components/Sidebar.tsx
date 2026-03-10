@@ -12,6 +12,7 @@ import {
   ArchiveBoxIcon,
   ClipboardDocumentListIcon,
   CubeIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';
 
 interface SubMenuItem {
@@ -46,6 +47,12 @@ const menuItems: MenuItem[] = [
     name: 'Production Batch',
     path: '/production-batch',
     icon: CubeIcon,
+    roles: [1, 2],
+  },
+  {
+    name: 'Quality Inspection',
+    path: '/quality-inspection',
+    icon: ClipboardDocumentCheckIcon,
     roles: [1, 2],
   },
   {

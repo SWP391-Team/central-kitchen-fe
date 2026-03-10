@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import ProductManagement from '@/pages/Inventory/ProductManagement'
 import ProductionPlanPage from '@/pages/ProductionPlan/ProductionPlanPage'
 import ProductionBatchPage from '@/pages/ProductionBatch/ProductionBatchPage'
+import QualityInspectionPage from '@/pages/QualityInspection/QualityInspectionPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
 import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
@@ -56,6 +57,12 @@ const AppRouter = () => {
         <Route 
           path="/production-batch" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><ProductionBatchPage /></ProtectedRoute>} 
+        />
+        
+        {/* Quality Inspection - Admin, Central_Staff */}
+        <Route 
+          path="/quality-inspection" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><QualityInspectionPage /></ProtectedRoute>} 
         />
         
         {/* User Management - Admin only */}

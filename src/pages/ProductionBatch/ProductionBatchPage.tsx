@@ -260,6 +260,11 @@ const ProductionBatchPage = () => {
     const statusConfig: { [key: string]: { color: string; label: string } } = {
       producing: { color: 'bg-orange-100 text-orange-700', label: 'Producing' },
       produced: { color: 'bg-green-100 text-green-700', label: 'Produced' },
+      waiting_qc: { color: 'bg-blue-100 text-blue-700', label: 'Waiting QC' },
+      under_qc: { color: 'bg-yellow-100 text-yellow-700', label: 'Under QC' },
+      qc_passed: { color: 'bg-emerald-100 text-emerald-700', label: 'QC Passed' },
+      qc_failed: { color: 'bg-red-100 text-red-700', label: 'QC Failed' },
+      rejected: { color: 'bg-gray-100 text-gray-700', label: 'Rejected' },
       cancelled: { color: 'bg-red-100 text-red-700', label: 'Cancelled' },
     };
 
@@ -286,6 +291,26 @@ const ProductionBatchPage = () => {
         showToast('Batch cancelled successfully!', 'success');
       } catch (err: any) {
         const errorMessage = err.response?.data?.message || 'Failed to cancel batch';
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
+      }
+    }
+  };
+
+  const handleSendToQC = async (batch: ProductionBatchWithDetails) => {
+    if (window.confirm(`Send batch ${batch.batch_code} to Quality Control?`)) {
+      try {
+        await productionBatchService.sendToQC(batch.batch_id);
+        
+        await loadPlans();
+        
+        if (activeTab === 'batches') {
+          await loadAllBatches();
+        }
+        
+        showToast('Batch sent to QC successfully!', 'success');
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || 'Failed to send batch to QC';
         setError(errorMessage);
         showToast(errorMessage, 'error');
       }
@@ -552,7 +577,7 @@ const ProductionBatchPage = () => {
                             {getBatchStatusBadge(batch.status)}
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            {(isCentralStaff || isAdmin) && batch.status !== 'cancelled' && (
+                            {(isCentralStaff || isAdmin) && batch.status !== 'cancelled' && batch.status !== 'rejected' && (
                               <div className="flex gap-2">
                                 {batch.status === 'producing' && (
                                   <button
@@ -560,6 +585,14 @@ const ProductionBatchPage = () => {
                                     className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
                                   >
                                     Finish Production
+                                  </button>
+                                )}
+                                {batch.status === 'produced' && (
+                                  <button
+                                    onClick={() => handleSendToQC(batch)}
+                                    className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-semibold"
+                                  >
+                                    Send to QC
                                   </button>
                                 )}
                                 {(batch.status === 'producing' || batch.status === 'produced') && (
@@ -572,7 +605,7 @@ const ProductionBatchPage = () => {
                                 )}
                               </div>
                             )}
-                            {batch.status === 'cancelled' && (
+                            {(batch.status === 'cancelled' || batch.status === 'rejected') && (
                               <span className="text-xs text-gray-400 italic">No actions available</span>
                             )}
                           </td>
