@@ -2,8 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
 import { storeService } from '@/api/services/storeService';
 import { User, UserCreateRequest, UserUpdateRequest, Store } from '@/api/types';
-import MeteorBackground from '@/components/MeteorBackground/MeteorBackground';
 import { FiEdit2, FiTrash2, FiPlus, FiSearch, FiChevronDown, FiTriangle, FiHexagon, FiAlertCircle } from 'react-icons/fi';
+
+const MeteorBackground: React.FC = () => {
+  const meteors = Array.from({ length: 40 }, (_, i) => i);
+  return (
+    <div className="meteor-background-container">
+      <div className="stars"></div>
+      <div className="shooting-stars">
+        {meteors.map((i) => (
+          <span key={i} style={{ '--i': i } as React.CSSProperties}></span>
+        ))}
+      </div>
+      <div className="bg-glow"></div>
+    </div>
+  );
+};
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -571,6 +585,154 @@ const UserManagementPage = () => {
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(49, 46, 129, 0.3); border-radius: 20px; }
+
+        .meteor-background-container {
+            position: absolute;
+            inset: 0;
+            background: var(--meteor-bg, #020617);
+            overflow: hidden;
+            z-index: 0;
+            pointer-events: none;
+            --meteor-head: #fff;
+            --meteor-tail-start: rgba(255, 255, 255, 1);
+            --meteor-tail-mid: rgba(56, 189, 248, 0.8);
+            --meteor-tail-end: rgba(168, 85, 247, 0.4);
+            --star-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                radial-gradient(1px 1px at 20px 30px, var(--star-color), rgba(0, 0, 0, 0)),
+                radial-gradient(1px 1px at 40px 70px, var(--star-color), rgba(0, 0, 0, 0)),
+                radial-gradient(1.5px 1.5px at 150px 100px, var(--star-color), rgba(0, 0, 0, 0)),
+                radial-gradient(2px 2px at 280px 45px, var(--star-color), rgba(0, 0, 0, 0)),
+                radial-gradient(1.5px 1.5px at 310px 150px, var(--star-color), rgba(0, 0, 0, 0)),
+                radial-gradient(1px 1px at 420px 200px, var(--star-color), rgba(0, 0, 0, 0));
+            background-repeat: repeat;
+            background-size: 400px 400px;
+            opacity: 0.5;
+            z-index: 0;
+        }
+
+        .shooting-stars {
+            position: absolute;
+            inset: -40%;
+            width: 180%;
+            height: 180%;
+            transform: rotateZ(-40deg);
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        .shooting-stars span {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            height: 2px;
+            background: transparent;
+            transform: translateX(0) translateZ(0);
+            opacity: 0;
+            animation: meteorQuantumFlight var(--duration) linear infinite;
+            animation-delay: var(--delay);
+            will-change: transform, opacity;
+        }
+
+        .shooting-stars span::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            right: 0;
+            transform: translateY(-50%);
+            width: var(--tail, 400px);
+            height: var(--thickness, 1px);
+            background: linear-gradient(to left,
+                    transparent 0%,
+                    var(--meteor-tail-end) 40%,
+                    var(--meteor-tail-mid) 70%,
+                    var(--meteor-tail-start) 100%);
+            border-radius: 200% 0 0 200%;
+            filter: drop-shadow(0 0 5px var(--meteor-tail-mid));
+        }
+
+        .shooting-stars span::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: var(--head-size, 3px);
+            height: var(--head-size, 3px);
+            background: var(--meteor-head);
+            border-radius: 50%;
+            box-shadow:
+                0 0 2px 1px var(--meteor-head),
+                0 0 8px 2px var(--meteor-tail-mid),
+                0 0 20px 4px var(--meteor-tail-end);
+            z-index: 10;
+        }
+
+        @keyframes meteorQuantumFlight {
+            0% { opacity: 0; transform: translateX(400px) scale(0.1); }
+            5% { opacity: 1; transform: translateX(0) scale(1); }
+            70% { opacity: 1; transform: translateX(-1000px) scale(1); }
+            85% { opacity: 0; transform: translateX(-1300px) scale(0.9); }
+            100% { opacity: 0; transform: translateX(-2000px) scale(0.1); }
+        }
+
+        .shooting-stars span:nth-child(1) { top: -10%; left: 30%; --duration: 4s; --delay: 2s; --tail: 700px; --head-size: 4px; --thickness: 2px; }
+        .shooting-stars span:nth-child(2) { top: 30%; left: 60%; --duration: 3.5s; --delay: 7s; --tail: 600px; --head-size: 3px; --thickness: 2px; }
+        .shooting-stars span:nth-child(3) { top: 60%; left: 90%; --duration: 4.2s; --delay: 0.5s; --tail: 800px; --head-size: 5px; --thickness: 3px; }
+        .shooting-stars span:nth-child(4) { top: 10%; left: 80%; --duration: 3.8s; --delay: 12s; --tail: 650px; --head-size: 4px; --thickness: 2px; }
+        .shooting-stars span:nth-child(5) { top: 50%; left: -20%; --duration: 4.5s; --delay: 5s; --tail: 550px; --head-size: 3px; --thickness: 2px; }
+        .shooting-stars span:nth-child(6) { top: 0%; left: 10%; --duration: 6s; --delay: 1s; --tail: 400px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(7) { top: 20%; left: 40%; --duration: 7s; --delay: 2.5s; --tail: 350px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(8) { top: 40%; left: 70%; --duration: 5.5s; --delay: 4.8s; --tail: 450px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(9) { top: 60%; left: 100%; --duration: 6.8s; --delay: 6s; --tail: 300px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(10) { top: 80%; left: 30%; --duration: 6.2s; --delay: 0.2s; --tail: 380px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(11) { top: 10%; left: 50%; --duration: 5.8s; --delay: 3s; --tail: 420px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(12) { top: 30%; left: 80%; --duration: 7.2s; --delay: 8s; --tail: 360px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(13) { top: 50%; left: 10%; --duration: 6.5s; --delay: 1.5s; --tail: 400px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(14) { top: 70%; left: 40%; --duration: 5.9s; --delay: 5.5s; --tail: 330px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(15) { top: 90%; left: 70%; --duration: 6.9s; --delay: 7.2s; --tail: 390px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(16) { top: 5%; left: 95%; --duration: 6.1s; --delay: 2.2s; --tail: 370px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(17) { top: 25%; left: 25%; --duration: 7.5s; --delay: 4.1s; --tail: 340px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(18) { top: 45%; left: 55%; --duration: 5.7s; --delay: 0.8s; --tail: 410px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(19) { top: 65%; left: 85%; --duration: 6.4s; --delay: 9s; --tail: 350px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(20) { top: 85%; left: 15%; --duration: 7.1s; --delay: 3.5s; --tail: 380px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(21) { top: 15%; left: 5%; --duration: 6.3s; --delay: 6.5s; --tail: 430px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(22) { top: 35%; left: 35%; --duration: 5.6s; --delay: 1.8s; --tail: 360px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(23) { top: 55%; left: 65%; --duration: 7.8s; --delay: 4.5s; --tail: 320px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(24) { top: 75%; left: 95%; --duration: 6.7s; --delay: 2.8s; --tail: 390px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(25) { top: 95%; left: 25%; --duration: 5.4s; --delay: 7.8s; --tail: 440px; --head-size: 2px; --thickness: 1px; }
+        .shooting-stars span:nth-child(26) { top: 0%; left: 20%; --duration: 12s; --delay: 0s; --tail: 200px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(27) { top: 20%; left: 50%; --duration: 11s; --delay: 3s; --tail: 250px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(28) { top: 40%; left: 80%; --duration: 13s; --delay: 6s; --tail: 220px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(29) { top: 60%; left: 10%; --duration: 10s; --delay: 2s; --tail: 180px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(30) { top: 80%; left: 40%; --duration: 14s; --delay: 8s; --tail: 240px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(31) { top: 10%; left: 70%; --duration: 12.5s; --delay: 1s; --tail: 210px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(32) { top: 30%; left: 100%; --duration: 11.5s; --delay: 5s; --tail: 260px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(33) { top: 50%; left: 30%; --duration: 13.5s; --delay: 9s; --tail: 190px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(34) { top: 70%; left: 60%; --duration: 10.5s; --delay: 4s; --tail: 230px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(35) { top: 90%; left: 90%; --duration: 14.5s; --delay: 7s; --tail: 200px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(36) { top: 5%; left: 15%; --duration: 11.2s; --delay: 2.5s; --tail: 250px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(37) { top: 25%; left: 45%; --duration: 12.8s; --delay: 6.5s; --tail: 220px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(38) { top: 45%; left: 75%; --duration: 10.8s; --delay: 1.5s; --tail: 180px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(39) { top: 65%; left: 5%; --duration: 13.8s; --delay: 5.5s; --tail: 240px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+        .shooting-stars span:nth-child(40) { top: 85%; left: 35%; --duration: 11.8s; --delay: 8.5s; --tail: 210px; --head-size: 1px; --thickness: 0.5px; opacity: 0.4; }
+
+        .bg-glow {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.1), transparent 80%);
+        }
+
       `}} />
     </div>
   );
