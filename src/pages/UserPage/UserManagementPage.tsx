@@ -1,7 +1,92 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
 import { storeService } from '@/api/services/storeService';
 import { User, UserCreateRequest, UserUpdateRequest, Store } from '@/api/types';
+import MeteorBackground from '@/components/MeteorBackground/MeteorBackground';
+import { FiEdit2, FiTrash2, FiPlus, FiSearch, FiChevronDown, FiTriangle, FiHexagon, FiAlertCircle } from 'react-icons/fi';
+
+interface ConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  type?: 'danger' | 'warning' | 'info';
+}
+
+const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  type = 'info',
+}) => {
+  if (!isOpen) return null;
+
+  const getConfig = () => {
+    switch (type) {
+      case 'danger': return {
+        bg: 'bg-rose-500 hover:bg-rose-600',
+        glow: 'shadow-rose-200',
+        iconBg: 'bg-rose-50',
+        iconColor: 'text-rose-500',
+        icon: <FiAlertCircle size={32} />,
+        accent: 'bg-rose-500'
+      };
+      case 'warning': return {
+        bg: 'bg-amber-400 hover:bg-amber-500',
+        glow: 'shadow-amber-200',
+        iconBg: 'bg-amber-50',
+        iconColor: 'text-amber-500',
+        icon: <FiTriangle size={30} />,
+        accent: 'bg-amber-400'
+      };
+      default: return {
+        bg: 'bg-indigo-600 hover:bg-indigo-700',
+        glow: 'shadow-indigo-200',
+        iconBg: 'bg-indigo-50',
+        iconColor: 'text-indigo-500',
+        icon: <FiHexagon size={32} />,
+        accent: 'bg-indigo-500'
+      };
+    }
+  };
+
+  const config = getConfig();
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 animate-fade-in overflow-hidden">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={onCancel}></div>
+      <div className="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-[380px] overflow-hidden transform transition-all animate-slide-up">
+        <div className={`h-1.5 w-full ${config.accent}`}></div>
+        <div className="px-8 pt-10 pb-8">
+          <div className="flex flex-col items-center text-center">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-sm ${config.iconBg} ${config.iconColor}`}>
+              {config.icon}
+            </div>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight mb-2">{title}</h3>
+            <p className="text-slate-500 text-sm font-bold leading-relaxed opacity-80">{message}</p>
+          </div>
+          <div className="flex flex-col gap-3 mt-8">
+            <button
+              onClick={onConfirm}
+              className={`w-full py-3.5 rounded-2xl text-xs font-black tracking-widest text-white shadow-xl transition-all active:scale-[0.97] transform ${config.bg} ${config.glow}`}
+            >
+              Confirm
+            </button>
+            <button
+              onClick={onCancel}
+              className="w-full py-3 rounded-2xl text-[11px] font-black tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -10,11 +95,13 @@ const UserManagementPage = () => {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<number | 'all'>('all');
   const [filterStore, setFilterStore] = useState<number | 'all'>('all');
   const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'store_id'>('user_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
     user_code: '',
     username: '',
@@ -24,9 +111,33 @@ const UserManagementPage = () => {
     is_active: true,
   });
 
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: 'danger' | 'warning' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   useEffect(() => {
     loadUsers();
     loadStores();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
   }, []);
 
   const loadUsers = async () => {
@@ -99,24 +210,24 @@ const UserManagementPage = () => {
       if (editingUser) {
         const updateData: UserUpdateRequest = { ...formData };
         if (!updateData.password) {
-          delete updateData.password; 
+          delete updateData.password;
         }
         delete (updateData as any).user_code;
         await userService.updateUser(editingUser.user_id, updateData);
       } else {
         const createData = { ...formData } as UserCreateRequest;
-        
+
         const userCodePattern = /^USR-\d{4}$/;
         if (!createData.user_code || !userCodePattern.test(createData.user_code.toUpperCase())) {
           setError('User code must be in format USR-XXXX (e.g., USR-0001)');
           return;
         }
-        
+
         createData.user_code = createData.user_code.toUpperCase();
-        
+
         await userService.createUser(createData);
       }
-      
+
       handleCloseModal();
       loadUsers();
     } catch (err: any) {
@@ -124,434 +235,319 @@ const UserManagementPage = () => {
     }
   };
 
-  const handleDelete = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-
-    try {
-      await userService.deleteUser(userId);
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete user');
-    }
+  const handleDelete = async (userId: number, username: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete User',
+      message: `Are you sure you want to permanently remove "${username}"? This action cannot be undone.`,
+      type: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await userService.deleteUser(userId);
+          loadUsers();
+        } catch (err: any) {
+          setError(err.response?.data?.message || 'Failed to delete user');
+        }
+      },
+    });
   };
 
   const handleToggleStatus = async (user: User) => {
     const action = user.is_active ? 'deactivate' : 'activate';
-    if (!confirm(`Are you sure you want to ${action} user "${user.username}"?`)) return;
-
-    try {
-      await userService.updateUser(user.user_id, { is_active: !user.is_active });
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${action} user`);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: `${user.is_active ? 'Deactivate' : 'Activate'} User`,
+      message: `Are you sure you want to ${action} user "${user.username}"?`,
+      type: user.is_active ? 'warning' : 'info',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        try {
+          await userService.updateUser(user.user_id, { is_active: !user.is_active });
+          loadUsers();
+        } catch (err: any) {
+          setError(err.response?.data?.message || `Failed to ${action} user`);
+        }
+      },
+    });
   };
 
   const getRoleName = (roleId: number) => {
-    const roles: Record<number, string> = {
-      1: 'Admin',
-      2: 'Central Staff',
-      3: 'Store Staff',
-    };
+    const roles: Record<number, string> = { 1: 'Admin', 2: 'Central Staff', 3: 'Store Staff' };
     return roles[roleId] || 'Unknown';
   };
 
   const getStoreName = (storeId: number | null) => {
     if (!storeId) return '-';
-    const store = stores.find(s => s.store_id === storeId);
-    return store ? store.store_name : `Store #${storeId}`;
+    return stores.find(s => s.store_id === storeId)?.store_name || `Store #${storeId}`;
   };
 
   const getStoreAddress = (storeId: number | null) => {
     if (!storeId) return '-';
-    const store = stores.find(s => s.store_id === storeId);
-    return store ? store.store_address : '-';
+    return stores.find(s => s.store_id === storeId)?.store_address || '-';
   };
 
   const filteredAndSortedUsers = users
     .filter(user => {
-      const matchesSearch = searchTerm === '' || 
-        user.user_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = searchTerm === '' ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.user_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getRoleName(user.role_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
         getStoreName(user.store_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
         getStoreAddress(user.store_id).toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesRole = filterRole === 'all' || user.role_id === filterRole;
-      const matchesStore = filterStore === 'all' || user.store_id === filterStore;
-      
-      return matchesSearch && matchesRole && matchesStore;
+      return matchesSearch && (filterRole === 'all' || user.role_id === filterRole) && (filterStore === 'all' || user.store_id === filterStore);
     })
     .sort((a, b) => {
-      let compareValue = 0;
-      
+      let val = 0;
       switch (sortBy) {
-        case 'user_id':
-          compareValue = a.user_id - b.user_id;
-          break;
-        case 'username':
-          compareValue = a.username.localeCompare(b.username);
-          break;
-        case 'role_id':
-          compareValue = a.role_id - b.role_id;
-          break;
-        case 'store_id':
-          const storeNameA = getStoreName(a.store_id);
-          const storeNameB = getStoreName(b.store_id);
-          compareValue = storeNameA.localeCompare(storeNameB);
-          break;
+        case 'user_id': val = a.user_id - b.user_id; break;
+        case 'username': val = a.username.localeCompare(b.username); break;
+        case 'role_id': val = a.role_id - b.role_id; break;
+        case 'store_id': val = getStoreName(a.store_id).localeCompare(getStoreName(b.store_id)); break;
       }
-      
-      return sortOrder === 'asc' ? compareValue : -compareValue;
+      return sortOrder === 'asc' ? val : -val;
     });
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mb-4"></div>
-          <div className="text-xl font-semibold text-gray-700">Loading users...</div>
-        </div>
-      </div>
-    );
-  }
+  const meteorVariables = {
+    '--meteor-bg': '#fcfbff',
+    '--meteor-head': '#1e1b4b',
+    '--meteor-tail-start': 'rgba(49, 46, 129, 1)',
+    '--meteor-tail-mid': 'rgba(79, 70, 229, 0.5)',
+    '--meteor-tail-end': 'rgba(255, 255, 255, 0)',
+    '--star-color': 'rgba(49, 46, 129, 0.1)',
+    '--head-size': '22px',
+    '--thickness': '10px',
+    '--tail': '1500px',
+  } as React.CSSProperties;
+
+  if (loading) return null;
 
   return (
-    <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-800 flex items-center">
-              <span className="mr-3">👥</span>
-              User Management
-            </h1>
-            <p className="text-gray-600 mt-2">Manage system users and permissions</p>
-          </div>
-          <button
-            onClick={() => handleOpenModal()}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center"
-          >
-            <span className="text-xl mr-2">+</span>
-            Create New User
-          </button>
-        </div>
+    <div className="h-screen max-h-screen relative bg-transparent flex flex-col p-8 font-sans overflow-hidden text-indigo-950 border-none">
+      <div className="absolute inset-0 z-0 bg-transparent" style={meteorVariables}><MeteorBackground /></div>
 
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-6 py-4 rounded-lg mb-6 flex items-center shadow-md animate-shake">
-          <span className="text-2xl mr-3">⚠️</span>
-          <span>{error}</span>
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[200]">
+          <div className="bg-white/95 border-2 border-rose-300 text-rose-700 px-8 py-3 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-top duration-500">
+            <span className="text-xl">⚠️</span>
+            <p className="font-bold text-xs tracking-widest">{error}</p>
+            <button onClick={() => setError('')} className="ml-4 text-rose-400 hover:text-rose-700 font-black">×</button>
+          </div>
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Total Users</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.length}</p>
-            </div>
-            <div className="text-4xl">👤</div>
+      <div className="relative z-10 space-y-6 max-w-[1800px] mx-auto w-full h-full flex flex-col">
+        <header className="flex justify-between items-center shrink-0">
+          <div>
+            <h1 className="text-5xl font-black text-indigo-950 tracking-tighter italic">
+              User Management
+            </h1>
+            <p className="text-indigo-800 font-bold mt-2 opacity-70">Manage system users and permissions</p>
           </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Active Users</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.is_active).length}</p>
+          <button
+            onClick={() => handleOpenModal()}
+            className="group relative px-10 py-5 rounded-[1.5rem] overflow-hidden shadow-xl transform hover:scale-105 active:scale-95 transition-all duration-300"
+          >
+            <div className="absolute inset-0 bg-indigo-700 group-hover:bg-indigo-800 transition-colors" />
+            <div className="relative flex items-center text-white font-bold text-xs tracking-widest">
+              <FiPlus className="text-xl mr-2" />
+              Create New User
             </div>
-            <div className="text-4xl">✅</div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Admins</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 1).length}</p>
+          </button>
+        </header>
+
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-6 shrink-0">
+          {[
+            { label: 'Total Users', value: users.length, icon: '👤', color: 'text-indigo-900' },
+            { label: 'Active Users', value: users.filter(u => u.is_active).length, icon: '✅', color: 'text-emerald-800' },
+            { label: 'Admins', value: users.filter(u => u.role_id === 1).length, icon: '👑', color: 'text-amber-800' },
+            { label: 'Staff Members', value: users.filter(u => u.role_id === 2 || u.role_id === 3).length, icon: '💼', color: 'text-sky-800' }
+          ].map((stat, i) => (
+            <div key={i} className="bg-transparent border-2 border-white/50 rounded-[2.5rem] p-8 transition-all duration-300 hover:border-indigo-200 group/stat shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-indigo-700 font-bold text-xs tracking-widest mb-1 opacity-70">{stat.label}</p>
+                  <p className={`text-4xl font-black ${stat.color} tracking-tighter`}>{stat.value}</p>
+                </div>
+                <div className="text-4xl opacity-10 group-hover/stat:opacity-80 transition-all transform">{stat.icon}</div>
+              </div>
             </div>
-            <div className="text-4xl">👑</div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Staff Members</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 2 || u.role_id === 3).length}</p>
+          ))}
+        </section>
+
+        <main className="bg-transparent rounded-[3.5rem] border-2 border-white/50 flex-1 flex flex-col min-h-0 shadow-sm overflow-hidden">
+          <div className="p-8 border-b-2 border-white/30 shrink-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-center">
+              <div className="lg:col-span-2 relative group">
+                <FiSearch className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-700" size={20} />
+                <input
+                  type="text"
+                  placeholder="🔍 Search by user code, username, role, store name, address..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="w-full pl-16 pr-8 py-5 rounded-[2rem] border-2 border-white/40 bg-white/20 text-indigo-950 font-bold text-sm placeholder-indigo-300 focus:border-indigo-600 focus:bg-white transition-all outline-none shadow-sm"
+                />
+              </div>
+              <div className="relative">
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className="w-full bg-white/20 border-2 border-white/40 pl-6 pr-10 py-5 rounded-[2rem] text-indigo-900 font-bold text-base cursor-pointer appearance-none tracking-wider outline-none hover:bg-white transition-all shadow-sm"
+                >
+                  <option value="all">All Roles</option>
+                  <option value={1}>Admin</option>
+                  <option value={2}>Central Staff</option>
+                  <option value={3}>Store Staff</option>
+                </select>
+                <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-700 pointer-events-none" />
+              </div>
+              <div className="relative">
+                <select
+                  value={filterStore}
+                  onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className="w-full bg-white/20 border-2 border-white/40 pl-6 pr-10 py-5 rounded-[2rem] text-indigo-900 font-bold text-base cursor-pointer appearance-none tracking-wider outline-none hover:bg-white transition-all shadow-sm"
+                >
+                  <option value="all">All Stores</option>
+                  {stores.map(s => <option key={s.store_id} value={s.store_id}>{s.store_name} ({s.store_address})</option>)}
+                </select>
+                <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-700 pointer-events-none" />
+              </div>
+              <div className="flex gap-4">
+                <div className="relative flex-1">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    className="w-full bg-white/20 border-2 border-white/40 pl-6 pr-10 py-5 rounded-[2rem] text-indigo-900 font-bold text-base cursor-pointer appearance-none tracking-wider outline-none hover:bg-white transition-all shadow-sm"
+                  >
+                    <option value="user_id">Sort by ID</option>
+                    <option value="username">Sort by Username</option>
+                    <option value="role_id">Sort by Role</option>
+                    <option value="store_id">Sort by Store</option>
+                  </select>
+                  <FiChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-700 pointer-events-none" />
+                </div>
+                <button onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="w-16 h-16 bg-indigo-700 text-white rounded-[2rem] flex items-center justify-center font-black text-xl shadow-lg hover:bg-indigo-800 transition-all active:scale-95">
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                </button>
+              </div>
             </div>
-            <div className="text-4xl">💼</div>
           </div>
-        </div>
+
+          <div className="flex-1 overflow-auto custom-scrollbar p-8">
+            <table className="min-w-full border-separate border-spacing-0 text-indigo-950">
+              <thead>
+                <tr className="text-xs font-black tracking-widest">
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">ID</th>
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">User Code</th>
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">Username</th>
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">Role</th>
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">Store Name</th>
+                  <th className="px-6 py-6 text-left border-b-2 border-white/30">Store Address</th>
+                  <th className="px-6 py-6 text-center border-b-2 border-white/30">Status</th>
+                  <th className="px-6 py-6 text-center border-b-2 border-white/30">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y-2 divide-white/10">
+                {filteredAndSortedUsers.map((user) => (
+                  <tr key={user.user_id} className="group/row transition-all duration-300 hover:bg-white/10">
+                    <td className="px-6 py-8 text-indigo-600 font-bold text-sm font-mono opacity-70">#{user.user_id}</td>
+                    <td className="px-6 py-8 font-bold text-indigo-800 text-lg tracking-wide font-mono italic">{user.user_code}</td>
+                    <td className="px-6 py-8">
+                      <div className="flex items-center gap-6">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-800 font-black text-sm shadow-lg border border-indigo-50 group-hover/row:scale-110 transition-transform">
+                          {user.username.charAt(0)}
+                        </div>
+                        <span className="font-black text-indigo-950 text-xl tracking-tight">{user.username}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-8 text-sm font-black text-indigo-800 tracking-wider font-bold">{getRoleName(user.role_id)}</td>
+                    <td className="px-6 py-8 text-indigo-950 font-bold text-[15px]">{getStoreName(user.store_id)}</td>
+                    <td className="px-6 py-8 text-indigo-900 text-xs font-medium leading-relaxed whitespace-normal opacity-80">
+                      {getStoreAddress(user.store_id)}
+                    </td>
+                    <td className="px-6 py-8 text-center">
+                      <button
+                        onClick={() => handleToggleStatus(user)}
+                        className={`px-6 py-2 rounded-full text-xs font-black tracking-widest border-2 shadow-sm transition-all hover:scale-105 active:scale-95 ${user.is_active ? 'bg-emerald-50 border-emerald-400 text-emerald-800 hover:bg-emerald-100' : 'bg-rose-50 border-rose-400 text-rose-800 hover:bg-rose-100'}`}
+                        title={user.is_active ? 'Click to deactivate' : 'Click to activate'}
+                      >
+                        {user.is_active ? 'Active' : 'Inactive'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-8">
+                      <div className="flex items-center justify-center gap-6">
+                        <button onClick={() => handleOpenModal(user)} className="text-indigo-400 hover:text-indigo-800 transition-colors"><FiEdit2 size={24} /></button>
+                        <button onClick={() => handleDelete(user.user_id, user.username)} className="text-rose-300 hover:text-rose-600 transition-colors"><FiTrash2 size={24} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </main>
       </div>
 
-      <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
-        {/* Search and Filter Bar */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2">
-              <input
-                type="text"
-                placeholder="🔍 Search by user code, username, role, store name, address..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
-              />
-            </div>
-            <select 
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
-            >
-              <option value="all">All Roles</option>
-              <option value={1}>Admin</option>
-              <option value={2}>Central Staff</option>
-              <option value={3}>Store Staff</option>
-            </select>
-            <select
-              value={filterStore}
-              onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
-            >
-              <option value="all">All Stores</option>
-              {stores.map(store => (
-                <option key={store.store_id} value={store.store_id}>
-                  {store.store_name}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'user_id' | 'username' | 'role_id' | 'store_id')}
-                className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all flex-1"
-              >
-                <option value="user_id">Sort by ID</option>
-                <option value="username">Sort by Username</option>
-                <option value="role_id">Sort by Role</option>
-                <option value="store_id">Sort by Store</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-3 py-2 bg-white rounded-lg hover:bg-gray-100 transition-all font-bold"
-                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50 border-b-2 border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">User Code</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Name</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Address</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
-              </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredAndSortedUsers.map((user) => (
-              <tr key={user.user_id} className="hover:bg-indigo-50 transition-colors duration-150">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-semibold text-gray-800">#{user.user_id}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-bold text-indigo-700 text-lg">{user.user_code}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold mr-3">
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-medium text-gray-800">{user.username}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${
-                    user.role_id === 1 ? 'bg-red-100 text-red-800' :
-                    user.role_id === 2 ? 'bg-blue-100 text-blue-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {user.role_id === 1 ? '' : user.role_id === 2 ? '' : ''} {getRoleName(user.role_id)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-gray-700 font-medium">{getStoreName(user.store_id)}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-gray-600 text-sm">{getStoreAddress(user.store_id)}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleStatus(user)}
-                    className={`px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full cursor-pointer transition-all ${
-                      user.is_active ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
-                    }`}
-                  >
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleOpenModal(user)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold hover:underline"
-                  >
-                    ✏️ 
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.user_id)}
-                    className="text-red-600 hover:text-red-900 font-semibold hover:underline"
-                  >
-                    🗑️ 
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {filteredAndSortedUsers.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📭</div>
-            <p className="text-gray-500 text-lg">No users found</p>
-          </div>
-        )}
-      </div>
-      </div>
-
-      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-slide-up">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
-              <h2 className="text-2xl font-bold flex items-center">
-                <span className="mr-2">{editingUser ? '✏️' : '➕'}</span>
-                {editingUser ? 'Edit User' : 'Create New User'}
-              </h2>
+        <div className="fixed inset-0 bg-indigo-950/20 backdrop-blur-3xl flex items-center justify-center z-[100] p-8 animate-in fade-in duration-500">
+          <div className="bg-white border-4 border-white rounded-[3rem] shadow-2xl max-w-xl w-full relative animate-in zoom-in-95 duration-500 overflow-hidden">
+            <div className="bg-gradient-to-br from-indigo-700 to-indigo-900 text-white p-12">
+              <h2 className="text-3xl font-black tracking-tighter italic">{editingUser ? 'Edit User' : 'Create New User'}</h2>
             </div>
-
-            <div className="p-6">
-              {error && (
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center">
-                  <span className="text-xl mr-2"></span>
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    User Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.user_code}
-                    onChange={(e) => setFormData({ ...formData, user_code: e.target.value.toUpperCase() })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all uppercase"
-                    placeholder="USR-0001"
-                    pattern="USR-\d{4}"
-                    title="Format: USR-XXXX (e.g., USR-0001)"
-                    required
-                    disabled={!!editingUser}
-                    readOnly={!!editingUser}
-                    style={editingUser ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                  />
-                  {editingUser && (
-                    <p className="text-sm text-gray-500 mt-1">User code cannot be modified after creation</p>
-                  )}
-                  {!editingUser && (
-                    <p className="text-sm text-gray-500 mt-1">Format: USR-XXXX (e.g., USR-0001, USR-0002)</p>
-                  )}
+            <div className="p-10">
+              <form onSubmit={handleSubmit} className="space-y-8 font-bold text-sm tracking-widest">
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-indigo-950 mb-3 ml-1">User Code</label>
+                    <input
+                      type="text"
+                      value={formData.user_code}
+                      onChange={(e) => setFormData({ ...formData, user_code: e.target.value.toUpperCase() })}
+                      className={`w-full px-8 py-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-[1.5rem] focus:outline-none focus:border-indigo-700 text-indigo-950 font-bold text-base transition-all ${editingUser ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      placeholder="USR-0001"
+                      disabled={!!editingUser}
+                      required
+                    />
+                    {!editingUser && <p className="text-[10px] text-indigo-400 mt-2 lowercase normal-case italic">Format: USR-XXXX (e.g., USR-0001)</p>}
+                  </div>
+                  <div>
+                    <label className="block text-indigo-950 mb-3 ml-1">Username</label>
+                    <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} className="w-full px-8 py-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-[1.5rem] focus:outline-none focus:border-indigo-700 text-indigo-950 font-bold text-base transition-all" placeholder="Enter username" required />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Username
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                    placeholder="Enter username"
-                    required
-                  />
+                  <label className="block text-indigo-950 mb-3 ml-1">Password {editingUser && <span className="text-sm text-gray-500 ml-2">(leave blank to keep current)</span>}</label>
+                  <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full px-8 py-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-[1.5rem] focus:outline-none focus:border-indigo-700 text-indigo-950 font-mono text-base transition-all" placeholder="Enter password" required={!editingUser} />
                 </div>
 
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Password {editingUser && <span className="text-sm text-gray-500 ml-2">(leave blank to keep current)</span>}
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                    placeholder="Enter password"
-                    required={!editingUser}
-                  />
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <label className="block text-indigo-950 mb-3 ml-1">Role</label>
+                    <div className="relative">
+                      <select value={formData.role_id} onChange={(e) => setFormData({ ...formData, role_id: parseInt(e.target.value) })} className="w-full px-8 py-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-[1.5rem] focus:outline-none focus:border-indigo-700 text-indigo-950 font-bold appearance-none">
+                        <option value={1}>Admin</option>
+                        <option value={2}>Central Staff</option>
+                        <option value={3}>Store Staff</option>
+                      </select>
+                      <FiChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-indigo-800" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-indigo-950 mb-3 ml-1">Store</label>
+                    <div className="relative">
+                      <select value={formData.store_id || ''} onChange={(e) => setFormData({ ...formData, store_id: e.target.value ? parseInt(e.target.value) : null })} className="w-full px-8 py-4 bg-indigo-50/30 border-2 border-indigo-100 rounded-[1.5rem] focus:outline-none focus:border-indigo-700 text-indigo-950 font-bold appearance-none">
+                        <option value="">No Store</option>
+                        {stores.map(s => <option key={s.store_id} value={s.store_id}>{s.store_name} ({s.store_address})</option>)}
+                      </select>
+                      <FiChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-indigo-800" />
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Role
-                  </label>
-                  <select
-                    value={formData.role_id}
-                    onChange={(e) => setFormData({ ...formData, role_id: parseInt(e.target.value) })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                    required
-                  >
-                    <option value={1}>Admin</option>
-                    <option value={2}>Central Staff</option>
-                    <option value={3}>Store Staff</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Store <span className="text-sm text-gray-500 ml-2">(optional)</span>
-                  </label>
-                  <select
-                    value={formData.store_id || ''}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      store_id: e.target.value ? parseInt(e.target.value) : null 
-                    })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                  >
-                    <option value="">No Store</option>
-                    {stores.map(store => (
-                      <option key={store.store_id} value={store.store_id}>
-                        {store.store_name} ({store.store_address})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold text-gray-700 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
-                  >
+                <div className="flex justify-end gap-6 pt-6">
+                  <button type="button" onClick={handleCloseModal} className="px-10 py-4 text-indigo-600 font-bold tracking-widest hover:text-indigo-900 transition-all">Cancel</button>
+                  <button type="submit" className="px-14 py-4 bg-indigo-700 text-white rounded-[1.5rem] font-bold tracking-widest hover:bg-indigo-900 shadow-xl transition-all">
                     {editingUser ? 'Update' : 'Create'}
                   </button>
                 </div>
@@ -560,6 +556,22 @@ const UserManagementPage = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(49, 46, 129, 0.3); border-radius: 20px; }
+      `}} />
     </div>
   );
 };
