@@ -8,7 +8,7 @@ import {
 } from '@/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/outline';
 
 const QualityInspectionPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
@@ -35,6 +35,7 @@ const QualityInspectionPage = () => {
   const pageSize = 10;
   
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<QualityInspectionWithDetails | null>(null);
   const [finishData, setFinishData] = useState<QualityInspectionFinishRequest>({
     inspection_mode: 'sampling',
@@ -136,14 +137,13 @@ const QualityInspectionPage = () => {
     }
   };
 
-  const handleReinspection = async (batch: ProductionBatchWithDetails) => {
-    if (window.confirm(`Start reinspection for batch ${batch.batch_code}?`)) {
+  const handleReinspection = async (inspection: QualityInspectionWithDetails) => {
+    if (window.confirm(`Start reinspection for batch ${inspection.batch_code}?`)) {
       try {
-        await qualityInspectionService.reinspection({ batch_id: batch.batch_id });
+        await qualityInspectionService.reinspection({ batch_id: inspection.batch_id });
         showToast('Reinspection started successfully!', 'success');
-        loadBatches();
-        setActiveTab('inspections');
         loadInspections();
+        loadBatches();
       } catch (error: any) {
         console.error('Error starting reinspection:', error);
         showToast(error.response?.data?.message || 'Failed to start reinspection', 'error');
@@ -189,6 +189,16 @@ const QualityInspectionPage = () => {
       inspection_result: 'Pass',
       note: ''
     });
+  };
+
+  const handleOpenDetailModal = (inspection: QualityInspectionWithDetails) => {
+    setSelectedInspection(inspection);
+    setShowDetailModal(true);
+  };
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedInspection(null);
   };
 
   const handleInspectionModeChange = (mode: 'sampling' | 'full') => {
@@ -462,17 +472,12 @@ const QualityInspectionPage = () => {
                                 Start Inspection
                               </button>
                             )}
-                            {batch.status === 'qc_failed' && (
-                              <button
-                                onClick={() => handleReinspection(batch)}
-                                className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
-                              >
-                                Reinspection
-                              </button>
+                            {batch.status !== 'waiting_qc' && (
+                              <span className="text-xs text-gray-400 italic">-</span>
                             )}
                           </div>
                         )}
-                        {(batch.status === 'under_qc' || batch.status === 'qc_passed' || batch.status === 'rejected') && (
+                        {!(isCentralStaff || isAdmin) && (
                           <span className="text-xs text-gray-400 italic">-</span>
                         )}
                       </td>
@@ -572,6 +577,8 @@ const QualityInspectionPage = () => {
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Inspection No</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Status At Inspection</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Current Batch Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -589,36 +596,54 @@ const QualityInspectionPage = () => {
                         <td className="px-4 py-3 text-sm text-center">{inspection.inspection_no}</td>
                         <td className="px-4 py-3 text-sm text-right">{inspection.produced_qty || '-'}</td>
                         <td className="px-4 py-3 text-sm">{getInspectionStatusBadge(inspection.status)}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {inspection.batch_status_at_inspection ? getBatchStatusBadge(inspection.batch_status_at_inspection) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {inspection.batch_status ? getBatchStatusBadge(inspection.batch_status) : '-'}
+                        </td>
                         <td className="px-4 py-3 text-sm">{formatDate(inspection.created_at)}</td>
                         <td className="px-4 py-3 text-sm">
-                          {(isCentralStaff || isAdmin) && (
-                            <div className="flex gap-2">
-                              {inspection.status === 'Inspecting' && (
-                                <button
-                                  onClick={() => handleOpenFinishModal(inspection)}
-                                  className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
-                                >
-                                  Finish Inspection
-                                </button>
-                              )}
-                              {inspection.status === 'Failed' && 
-                               inspection.inspection_no === inspection.max_inspection_no && 
-                               inspection.batch_status === 'qc_failed' && (
-                                <button
-                                  onClick={() => handleRejectBatch(inspection)}
-                                  className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
-                                >
-                                  Reject
-                                </button>
-                              )}
-                              {inspection.status !== 'Inspecting' && 
-                               !(inspection.status === 'Failed' && 
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleOpenDetailModal(inspection)}
+                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                              title="View Details"
+                            >
+                              <EyeIcon className="h-5 w-5" />
+                            </button>
+                            {(isCentralStaff || isAdmin) && (
+                              <>
+                                {inspection.status === 'Inspecting' && (
+                                  <button
+                                    onClick={() => handleOpenFinishModal(inspection)}
+                                    className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
+                                  >
+                                    Finish Inspection
+                                  </button>
+                                )}
+                                {inspection.batch_status === 'qc_failed' && 
+                                 inspection.inspection_no === inspection.max_inspection_no && (
+                                  <button
+                                    onClick={() => handleReinspection(inspection)}
+                                    className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
+                                  >
+                                    Reinspection
+                                  </button>
+                                )}
+                                {inspection.status === 'Failed' && 
                                  inspection.inspection_no === inspection.max_inspection_no && 
-                                 inspection.batch_status === 'qc_failed') && (
-                                <span className="text-xs text-gray-400 italic">Completed</span>
-                              )}
-                            </div>
-                          )}
+                                 inspection.batch_status === 'qc_failed' && (
+                                  <button
+                                    onClick={() => handleRejectBatch(inspection)}
+                                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
+                                  >
+                                    Reject
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -763,7 +788,7 @@ const QualityInspectionPage = () => {
                     type="number"
                     min="1"
                     max={selectedInspection.produced_qty || 0}
-                    value={finishData.inspected_qty || ''}
+                    value={finishData.inspected_qty ?? ''}
                     onChange={(e) => handleInspectedQtyChange(parseInt(e.target.value) || 0)}
                     disabled={finishData.inspection_mode === 'full'}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
@@ -783,7 +808,7 @@ const QualityInspectionPage = () => {
                     type="number"
                     min="0"
                     max={finishData.inspected_qty}
-                    value={finishData.passed_qty || ''}
+                    value={finishData.passed_qty ?? ''}
                     onChange={(e) => handlePassedQtyChange(parseInt(e.target.value) || 0)}
                     disabled={finishData.inspected_qty === 0}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
@@ -800,7 +825,7 @@ const QualityInspectionPage = () => {
                     type="number"
                     min="0"
                     max={finishData.inspected_qty}
-                    value={finishData.failed_qty || ''}
+                    value={finishData.failed_qty ?? ''}
                     onChange={(e) => handleFailedQtyChange(parseInt(e.target.value) || 0)}
                     disabled={finishData.inspected_qty === 0}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
@@ -885,6 +910,137 @@ const QualityInspectionPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Detail Modal */}
+      {showDetailModal && selectedInspection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Quality Inspection Details</h2>
+              <button onClick={handleCloseDetailModal} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {/* Quality Inspection Information */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Inspection Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">QI Code:</span>
+                    <p className="font-semibold text-blue-700">{selectedInspection.quality_inspection_code}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspection No:</span>
+                    <p className="font-semibold">{selectedInspection.inspection_no}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspection Mode:</span>
+                    <p className="font-semibold capitalize">{selectedInspection.inspection_mode || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspection Status:</span>
+                    <p>{getInspectionStatusBadge(selectedInspection.status)}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspected Qty:</span>
+                    <p className="font-semibold">{selectedInspection.inspected_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Passed Qty:</span>
+                    <p className="font-semibold text-green-600">{selectedInspection.passed_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Failed Qty:</span>
+                    <p className="font-semibold text-red-600">{selectedInspection.failed_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspected By:</span>
+                    <p className="font-semibold">{selectedInspection.inspected_by_username || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Inspected At:</span>
+                    <p className="font-semibold">{selectedInspection.inspected_at ? formatDate(selectedInspection.inspected_at) : '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Created By:</span>
+                    <p className="font-semibold">{selectedInspection.created_by_username || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Created At:</span>
+                    <p className="font-semibold">{formatDate(selectedInspection.created_at)}</p>
+                  </div>
+                  {selectedInspection.note && (
+                    <div className="col-span-2">
+                      <span className="text-sm text-gray-600">Note:</span>
+                      <p className="font-semibold">{selectedInspection.note}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Batch Status Information */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Batch Status Overview</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">Batch Status at Inspection:</span>
+                    <p>
+                      {selectedInspection.batch_status_at_inspection 
+                        ? getBatchStatusBadge(selectedInspection.batch_status_at_inspection) 
+                        : <span className="text-gray-400">-</span>
+                      }
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Current Batch Status:</span>
+                    <p>{selectedInspection.batch_status ? getBatchStatusBadge(selectedInspection.batch_status) : '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Batch Information */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Batch Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">Batch Code:</span>
+                    <p className="font-semibold text-purple-700">{selectedInspection.batch_code}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Product Name:</span>
+                    <p className="font-semibold">{selectedInspection.product_name}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Product Code:</span>
+                    <p className="font-semibold">{selectedInspection.product_code}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Produced Qty:</span>
+                    <p className="font-semibold">{selectedInspection.produced_qty || '-'}</p>
+                  </div>
+                  {selectedInspection.max_inspection_no && (
+                    <div>
+                      <span className="text-sm text-gray-600">Total Inspections:</span>
+                      <p className="font-semibold">{selectedInspection.max_inspection_no}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={handleCloseDetailModal}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

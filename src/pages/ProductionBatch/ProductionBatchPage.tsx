@@ -12,6 +12,7 @@ import { useToast } from '@/contexts/ToastContext';
 import {
   PlusIcon,
   XMarkIcon,
+  EyeIcon,
 } from '@heroicons/react/24/outline';
 
 const ProductionBatchPage = () => {
@@ -36,6 +37,10 @@ const ProductionBatchPage = () => {
   const [productionDate, setProductionDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expiredDate, setExpiredDate] = useState<string>('');
   const [finishing, setFinishing] = useState(false);
+  
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedBatchForDetail, setSelectedBatchForDetail] = useState<ProductionBatchWithDetails | null>(null);
+  const [selectedPlanForDetail, setSelectedPlanForDetail] = useState<ProductionPlanWithProduct | null>(null);
   
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -323,6 +328,25 @@ const ProductionBatchPage = () => {
     return plans.find(p => p.plan_id === planId);
   };
 
+  const handleOpenDetailModal = (batch: ProductionBatchWithDetails) => {
+    setSelectedBatchForDetail(batch);
+    const planInfo = getPlanByIdFromBatch(batch.plan_id);
+    setSelectedPlanForDetail(planInfo || null);
+    setShowDetailModal(true);
+  };
+
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedBatchForDetail(null);
+    setSelectedPlanForDetail(null);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -577,37 +601,46 @@ const ProductionBatchPage = () => {
                             {getBatchStatusBadge(batch.status)}
                           </td>
                           <td className="px-4 py-3 text-sm">
-                            {(isCentralStaff || isAdmin) && batch.status !== 'cancelled' && batch.status !== 'rejected' && (
-                              <div className="flex gap-2">
-                                {batch.status === 'producing' && (
-                                  <button
-                                    onClick={() => handleOpenFinishModal(batch)}
-                                    className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
-                                  >
-                                    Finish Production
-                                  </button>
-                                )}
-                                {batch.status === 'produced' && (
-                                  <button
-                                    onClick={() => handleSendToQC(batch)}
-                                    className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-semibold"
-                                  >
-                                    Send to QC
-                                  </button>
-                                )}
-                                {(batch.status === 'producing' || batch.status === 'produced') && (
-                                  <button
-                                    onClick={() => handleCancelBatch(batch)}
-                                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
-                                  >
-                                    Cancel
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                            {(batch.status === 'cancelled' || batch.status === 'rejected') && (
-                              <span className="text-xs text-gray-400 italic">No actions available</span>
-                            )}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleOpenDetailModal(batch)}
+                                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                title="View Details"
+                              >
+                                <EyeIcon className="h-5 w-5" />
+                              </button>
+                              {(isCentralStaff || isAdmin) && batch.status !== 'cancelled' && batch.status !== 'rejected' && (
+                                <>
+                                  {batch.status === 'producing' && (
+                                    <button
+                                      onClick={() => handleOpenFinishModal(batch)}
+                                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
+                                    >
+                                      Finish Production
+                                    </button>
+                                  )}
+                                  {batch.status === 'produced' && (
+                                    <button
+                                      onClick={() => handleSendToQC(batch)}
+                                      className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-semibold"
+                                    >
+                                      Send to QC
+                                    </button>
+                                  )}
+                                  {(batch.status === 'producing' || batch.status === 'produced') && (
+                                    <button
+                                      onClick={() => handleCancelBatch(batch)}
+                                      className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
+                                    >
+                                      Cancel
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {(batch.status === 'cancelled' || batch.status === 'rejected') && (
+                                <span className="text-xs text-gray-400 italic">No actions available</span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -787,6 +820,125 @@ const ProductionBatchPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {showDetailModal && selectedBatchForDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Production Batch Details</h2>
+              <button onClick={handleCloseDetailModal} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {/* Batch Information */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Batch Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-sm text-gray-600">Batch Code:</span>
+                    <p className="font-semibold text-purple-700">{selectedBatchForDetail.batch_code}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Status:</span>
+                    <p>{getBatchStatusBadge(selectedBatchForDetail.status)}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Product Name:</span>
+                    <p className="font-semibold">{selectedBatchForDetail.product_name || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Product Code:</span>
+                    <p className="font-semibold">{selectedBatchForDetail.product_code || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Produced Qty:</span>
+                    <p className="font-semibold">{selectedBatchForDetail.produced_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Good Qty:</span>
+                    <p className="font-semibold text-green-600">{selectedBatchForDetail.good_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Defect Qty:</span>
+                    <p className="font-semibold text-red-600">{selectedBatchForDetail.defect_qty || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Production Date:</span>
+                    <p className="font-semibold">{formatDate(selectedBatchForDetail.production_date)}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Expired Date:</span>
+                    <p className="font-semibold">{formatDate(selectedBatchForDetail.expired_date)}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Created By:</span>
+                    <p className="font-semibold">{selectedBatchForDetail.created_by_username || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm text-gray-600">Created At:</span>
+                    <p className="font-semibold">{formatDate(selectedBatchForDetail.created_at)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Production Plan Information */}
+              {selectedPlanForDetail && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Production Plan Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-sm text-gray-600">Plan Code:</span>
+                      <p className="font-semibold text-blue-700">{selectedPlanForDetail.plan_code}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Plan Status:</span>
+                      <p>{getStatusBadge(selectedPlanForDetail.status)}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Planned Qty:</span>
+                      <p className="font-semibold">{selectedPlanForDetail.planned_qty}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Actual Qty:</span>
+                      <p className="font-semibold">{selectedPlanForDetail.actual_qty || 0}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Variance Qty:</span>
+                      <p className={`font-semibold ${
+                        (selectedPlanForDetail.variance_qty || 0) < 0 ? 'text-red-600' : 
+                        (selectedPlanForDetail.variance_qty || 0) > 0 ? 'text-green-600' : 
+                        'text-gray-600'
+                      }`}>
+                        {selectedPlanForDetail.variance_qty || 0}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Planned Date:</span>
+                      <p className="font-semibold">{formatDate(selectedPlanForDetail.planned_date)}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-600">Created At:</span>
+                      <p className="font-semibold">{formatDate(selectedPlanForDetail.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={handleCloseDetailModal}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
