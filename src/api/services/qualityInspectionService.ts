@@ -96,6 +96,13 @@ class QualityInspectionService {
     );
     return response.data.data;
   }
+
+  async sendReworkRequest(inspectionId: number): Promise<ProductionBatch> {
+    const response = await api.put<ApiResponse<ProductionBatch>>(
+      `/quality-inspections/${inspectionId}/send-rework-request`
+    );
+    return response.data.data;
+  }
 }
 
 export const qualityInspectionService = new QualityInspectionService();

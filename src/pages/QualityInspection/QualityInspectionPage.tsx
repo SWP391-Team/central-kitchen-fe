@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { productionBatchService } from '@/api/services/productionBatchService';
 import { qualityInspectionService } from '@/api/services/qualityInspectionService';
+import { reworkRecordService } from '@/api/services/reworkRecordService';
 import {
   ProductionBatchWithDetails,
   QualityInspectionWithDetails,
-  QualityInspectionFinishRequest
+  QualityInspectionFinishRequest,
+  ReworkRecordWithDetails
 } from '@/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -46,6 +48,8 @@ const QualityInspectionPage = () => {
     note: ''
   });
   const [finishing, setFinishing] = useState(false);
+
+  const [batchReworksMap, setBatchReworksMap] = useState<Record<number, ReworkRecordWithDetails[]>>({});
 
   useEffect(() => {
     if (activeTab === 'batches') {
@@ -91,6 +95,8 @@ const QualityInspectionPage = () => {
       });
 
       setBatches(filteredBatches);
+      
+      await loadReworkDataForBatches(filteredBatches);
     } catch (error: any) {
       console.error('Error loading batches:', error);
       showToast(error.response?.data?.message || 'Failed to load batches', 'error');
@@ -114,12 +120,124 @@ const QualityInspectionPage = () => {
       setInspections(result.data);
       setTotal(result.pagination.total);
       setTotalPages(result.pagination.totalPages);
+      
+      await loadReworkDataForInspections(result.data);
     } catch (error: any) {
       console.error('Error loading inspections:', error);
       showToast(error.response?.data?.message || 'Failed to load inspections', 'error');
     } finally {
       setInspectionsLoading(false);
     }
+  };
+
+  const loadReworkDataForBatches = async (batchList: ProductionBatchWithDetails[]) => {
+    try {
+      const reworkMap: Record<number, ReworkRecordWithDetails[]> = {};
+      
+      for (const batch of batchList) {
+        try {
+          const reworks = await reworkRecordService.getReworksByBatchId(batch.batch_id);
+          if (reworks && reworks.length > 0) {
+            reworkMap[batch.batch_id] = reworks;
+          }
+        } catch (error) {
+        }
+      }
+      
+      setBatchReworksMap(reworkMap);
+    } catch (error) {
+      console.error('Error loading rework data:', error);
+    }
+  };
+
+  const loadReworkDataForInspections = async (inspectionList: QualityInspectionWithDetails[]) => {
+    try {
+      const reworkMap: Record<number, ReworkRecordWithDetails[]> = {};
+      
+      for (const inspection of inspectionList) {
+        try {
+          const reworks = await reworkRecordService.getReworksByBatchId(inspection.batch_id);
+          if (reworks && reworks.length > 0) {
+            reworkMap[inspection.batch_id] = reworks;
+          }
+        } catch (error) {
+        }
+      }
+      
+      setBatchReworksMap(reworkMap);
+    } catch (error) {
+      console.error('Error loading rework data:', error);
+    }
+  };
+
+  const getSourceFromBatch = (batchId: number): string => {
+    const reworks = batchReworksMap[batchId];
+    if (!reworks || reworks.length === 0) {
+      return 'Production';
+    }
+    
+    const latestRework = reworks.reduce((latest, current) =>
+      current.rework_no > latest.rework_no ? current : latest
+    );
+    
+    return `Rework #${latestRework.rework_no}`;
+  };
+
+  const getSourceQtyFromBatch = (batch: ProductionBatchWithDetails): number => {
+    const reworks = batchReworksMap[batch.batch_id];
+    if (!reworks || reworks.length === 0) {
+      return batch.produced_qty || 0;
+    }
+    
+    const latestRework = reworks.reduce((latest, current) =>
+      current.rework_no > latest.rework_no ? current : latest
+    );
+    
+    return latestRework.reworkable_qty || 0;
+  };
+
+  const getSourceFromInspection = (inspection: QualityInspectionWithDetails): string => {
+    const reworks = batchReworksMap[inspection.batch_id];
+    if (!reworks || reworks.length === 0) {
+      return 'Production';
+    }
+    
+    const inspectionDate = new Date(inspection.created_at);
+    const priorReworks = reworks.filter(r => 
+      r.rework_date && new Date(r.rework_date) < inspectionDate
+    );
+    
+    if (priorReworks.length === 0) {
+      return 'Production';
+    }
+    
+    const latestRework = priorReworks.reduce((latest, current) =>
+      current.rework_no > latest.rework_no ? current : latest
+    );
+    
+    return `Rework #${latestRework.rework_no}`;
+  };
+
+  const getSourceQtyFromInspection = (inspection: QualityInspectionWithDetails): number => {
+    const reworks = batchReworksMap[inspection.batch_id];
+    if (!reworks || reworks.length === 0) {
+      return inspection.produced_qty || 0;
+    }
+    
+    const inspectionDate = new Date(inspection.created_at);
+    const priorReworks = reworks.filter(r => 
+      r.rework_date && new Date(r.rework_date) < inspectionDate
+    );
+    
+    if (priorReworks.length === 0) {
+      return inspection.produced_qty || 0;
+    }
+    
+    const latestRework = priorReworks.reduce((latest, current) =>
+      current.rework_no > latest.rework_no ? current : latest
+    );
+    
+    return latestRework.reworkable_qty || 0;
   };
 
   const handleStartInspection = async (batch: ProductionBatchWithDetails) => {
@@ -165,11 +283,31 @@ const QualityInspectionPage = () => {
     }
   };
 
+  const handleSendReworkRequest = async (inspection: QualityInspectionWithDetails) => {
+    if (window.confirm(`Send rework request for batch ${inspection.batch_code}?`)) {
+      try {
+        await qualityInspectionService.sendReworkRequest(inspection.quality_inspection_id);
+        showToast('Rework request sent successfully!', 'success');
+        loadInspections();
+        loadBatches();
+      } catch (error: any) {
+        console.error('Error sending rework request:', error);
+        showToast(error.response?.data?.message || 'Failed to send rework request', 'error');
+      }
+    }
+  };
+
   const handleOpenFinishModal = (inspection: QualityInspectionWithDetails) => {
     setSelectedInspection(inspection);
+    
+    const source = getSourceFromInspection(inspection);
+    const isRework = source.startsWith('Rework');
+    
+    const sourceQty = getSourceQtyFromInspection(inspection);
+    
     setFinishData({
-      inspection_mode: 'sampling',
-      inspected_qty: 0,
+      inspection_mode: isRework ? 'full' : 'sampling',
+      inspected_qty: isRework ? sourceQty : 0,
       passed_qty: 0,
       failed_qty: 0,
       inspection_result: 'Pass',
@@ -202,11 +340,12 @@ const QualityInspectionPage = () => {
   };
 
   const handleInspectionModeChange = (mode: 'sampling' | 'full') => {
-    if (mode === 'full' && selectedInspection?.produced_qty) {
+    if (mode === 'full' && selectedInspection) {
+      const sourceQty = getSourceQtyFromInspection(selectedInspection);
       setFinishData({
         ...finishData,
         inspection_mode: mode,
-        inspected_qty: selectedInspection.produced_qty,
+        inspected_qty: sourceQty,
         passed_qty: 0,
         failed_qty: 0
       });
@@ -263,8 +402,9 @@ const QualityInspectionPage = () => {
       return;
     }
 
-    if (finishData.inspected_qty > (selectedInspection.produced_qty || 0)) {
-      showToast('Inspected quantity cannot exceed produced quantity', 'error');
+    const sourceQty = getSourceQtyFromInspection(selectedInspection);
+    if (finishData.inspected_qty > sourceQty) {
+      showToast('Inspected quantity cannot exceed source quantity', 'error');
       return;
     }
 
@@ -300,6 +440,9 @@ const QualityInspectionPage = () => {
       qc_passed: { color: 'bg-emerald-100 text-emerald-700', label: 'QC Passed' },
       qc_failed: { color: 'bg-red-100 text-red-700', label: 'QC Failed' },
       rejected: { color: 'bg-gray-100 text-gray-700', label: 'Rejected' },
+      rework_required: { color: 'bg-orange-100 text-orange-700', label: 'Rework Required' },
+      reworking: { color: 'bg-purple-100 text-purple-700', label: 'Reworking' },
+      reworked: { color: 'bg-indigo-100 text-indigo-700', label: 'Reworked' },
     };
 
     const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-700', label: status };
@@ -444,6 +587,8 @@ const QualityInspectionPage = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Source Qty</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Production Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -459,6 +604,12 @@ const QualityInspectionPage = () => {
                         <span className="text-xs text-gray-500">{batch.product_code}</span>
                       </td>
                       <td className="px-4 py-3 text-sm text-right">{batch.produced_qty || '-'}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {getSourceFromBatch(batch.batch_id)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {getSourceQtyFromBatch(batch)}
+                      </td>
                       <td className="px-4 py-3 text-sm">{formatDate(batch.production_date)}</td>
                       <td className="px-4 py-3 text-sm">{getBatchStatusBadge(batch.status)}</td>
                       <td className="px-4 py-3 text-sm">
@@ -575,6 +726,8 @@ const QualityInspectionPage = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Inspection No</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Source Qty</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Status At Inspection</th>
@@ -594,58 +747,72 @@ const QualityInspectionPage = () => {
                           <span className="text-xs text-gray-500">{inspection.product_code}</span>
                         </td>
                         <td className="px-4 py-3 text-sm text-center">{inspection.inspection_no}</td>
-                        <td className="px-4 py-3 text-sm text-right">{inspection.produced_qty || '-'}</td>
-                        <td className="px-4 py-3 text-sm">{getInspectionStatusBadge(inspection.status)}</td>
                         <td className="px-4 py-3 text-sm">
-                          {inspection.batch_status_at_inspection ? getBatchStatusBadge(inspection.batch_status_at_inspection) : '-'}
+                          {getSourceFromInspection(inspection)}
                         </td>
-                        <td className="px-4 py-3 text-sm">
-                          {inspection.batch_status ? getBatchStatusBadge(inspection.batch_status) : '-'}
+                        <td className="px-4 py-3 text-sm text-right font-medium">
+                          {getSourceQtyFromInspection(inspection)}
                         </td>
-                        <td className="px-4 py-3 text-sm">{formatDate(inspection.created_at)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => handleOpenDetailModal(inspection)}
-                              className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                              title="View Details"
-                            >
-                              <EyeIcon className="h-5 w-5" />
-                            </button>
-                            {(isCentralStaff || isAdmin) && (
-                              <>
-                                {inspection.status === 'Inspecting' && (
-                                  <button
-                                    onClick={() => handleOpenFinishModal(inspection)}
-                                    className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
-                                  >
-                                    Finish Inspection
-                                  </button>
-                                )}
-                                {inspection.batch_status === 'qc_failed' && 
-                                 inspection.inspection_no === inspection.max_inspection_no && (
-                                  <button
-                                    onClick={() => handleReinspection(inspection)}
-                                    className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
-                                  >
-                                    Reinspection
-                                  </button>
-                                )}
-                                {inspection.status === 'Failed' && 
-                                 inspection.inspection_no === inspection.max_inspection_no && 
-                                 inspection.batch_status === 'qc_failed' && (
-                                  <button
-                                    onClick={() => handleRejectBatch(inspection)}
-                                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
-                                  >
-                                    Reject
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                          <td className="px-4 py-3 text-sm text-right">{inspection.produced_qty || '-'}</td>
+                          <td className="px-4 py-3 text-sm">{getInspectionStatusBadge(inspection.status)}</td>
+                          <td className="px-4 py-3 text-sm">
+                            {inspection.batch_status_at_inspection ? getBatchStatusBadge(inspection.batch_status_at_inspection) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {inspection.batch_status ? getBatchStatusBadge(inspection.batch_status) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm">{formatDate(inspection.created_at)}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleOpenDetailModal(inspection)}
+                                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                title="View Details"
+                              >
+                                <EyeIcon className="h-5 w-5" />
+                              </button>
+                              {(isCentralStaff || isAdmin) && (
+                                <>
+                                  {inspection.status === 'Inspecting' && (
+                                    <button
+                                      onClick={() => handleOpenFinishModal(inspection)}
+                                      className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
+                                    >
+                                      Finish Inspection
+                                    </button>
+                                  )}
+                                  {inspection.batch_status === 'qc_failed' && 
+                                   inspection.inspection_no === inspection.max_inspection_no && (
+                                    <button
+                                      onClick={() => handleReinspection(inspection)}
+                                      className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
+                                    >
+                                      Reinspection
+                                    </button>
+                                  )}
+                                  {inspection.status === 'Failed' && 
+                                   inspection.inspection_no === inspection.max_inspection_no && 
+                                   inspection.batch_status === 'qc_failed' && (
+                                    <>
+                                      <button
+                                        onClick={() => handleSendReworkRequest(inspection)}
+                                        className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs font-semibold"
+                                      >
+                                        Send Rework Request
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectBatch(inspection)}
+                                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
+                                      >
+                                        Reject
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -738,12 +905,20 @@ const QualityInspectionPage = () => {
                       <span className="ml-2 font-semibold">{selectedInspection.product_name}</span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Produced Qty:</span>
-                      <span className="ml-2 font-semibold">{selectedInspection.produced_qty}</span>
-                    </div>
-                    <div>
                       <span className="text-gray-600">Inspection No:</span>
                       <span className="ml-2 font-semibold">{selectedInspection.inspection_no}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Source:</span>
+                      <span className="ml-2 font-semibold">{getSourceFromInspection(selectedInspection)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Source Qty:</span>
+                      <span className="ml-2 font-semibold text-blue-700">{getSourceQtyFromInspection(selectedInspection)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Produced Qty:</span>
+                      <span className="ml-2 font-semibold">{selectedInspection.produced_qty}</span>
                     </div>
                   </div>
                 </div>
@@ -761,9 +936,12 @@ const QualityInspectionPage = () => {
                         value="sampling"
                         checked={finishData.inspection_mode === 'sampling'}
                         onChange={() => handleInspectionModeChange('sampling')}
-                        className="mr-2"
+                        disabled={selectedInspection && getSourceFromInspection(selectedInspection).startsWith('Rework')}
+                        className="mr-2 disabled:cursor-not-allowed"
                       />
-                      Sampling
+                      <span className={selectedInspection && getSourceFromInspection(selectedInspection).startsWith('Rework') ? 'text-gray-400' : ''}>
+                        Sampling
+                      </span>
                     </label>
                     <label className="flex items-center">
                       <input
@@ -777,6 +955,9 @@ const QualityInspectionPage = () => {
                       Full Inspection
                     </label>
                   </div>
+                  {selectedInspection && getSourceFromInspection(selectedInspection).startsWith('Rework') && (
+                    <p className="text-xs text-orange-600 mt-1">Rework batches must use Full Inspection mode</p>
+                  )}
                 </div>
 
                 {/* Inspected Quantity */}
@@ -787,7 +968,7 @@ const QualityInspectionPage = () => {
                   <input
                     type="number"
                     min="1"
-                    max={selectedInspection.produced_qty || 0}
+                    max={selectedInspection ? getSourceQtyFromInspection(selectedInspection) : 0}
                     value={finishData.inspected_qty ?? ''}
                     onChange={(e) => handleInspectedQtyChange(parseInt(e.target.value) || 0)}
                     disabled={finishData.inspection_mode === 'full'}
@@ -795,7 +976,7 @@ const QualityInspectionPage = () => {
                     required
                   />
                   {finishData.inspection_mode === 'full' && (
-                    <p className="text-xs text-gray-500 mt-1">Auto-set to produced quantity for full inspection</p>
+                    <p className="text-xs text-gray-500 mt-1">Auto-set to source quantity for full inspection</p>
                   )}
                 </div>
 
@@ -1002,6 +1183,80 @@ const QualityInspectionPage = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Rework Record Information (if applicable) */}
+              {(() => {
+                const reworks = batchReworksMap[selectedInspection.batch_id];
+                if (!reworks || reworks.length === 0) return null;
+                
+                // Find rework that was completed before this inspection
+                const inspectionDate = new Date(selectedInspection.created_at);
+                const priorReworks = reworks.filter(r => 
+                  r.rework_date && new Date(r.rework_date) < inspectionDate
+                );
+                
+                if (priorReworks.length === 0) return null;
+                
+                const latestRework = priorReworks.reduce((latest, current) =>
+                  current.rework_no > latest.rework_no ? current : latest
+                );
+                
+                return (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
+                      Rework Record Information (Rework #{latestRework.rework_no})
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4 bg-orange-50 p-4 rounded-lg border border-orange-200">
+                      <div>
+                        <span className="text-sm text-gray-600">Rework Code:</span>
+                        <p className="font-semibold text-orange-700">{latestRework.rework_code}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Rework No:</span>
+                        <p className="font-semibold">{latestRework.rework_no}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Rework Quantity:</span>
+                        <p className="font-semibold text-orange-600">{latestRework.rework_qty}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Reworkable Quantity:</span>
+                        <p className="font-semibold text-green-600">{latestRework.reworkable_qty || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Non-Reworkable Quantity:</span>
+                        <p className="font-semibold text-red-600">{latestRework.non_reworkable_qty || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Rework Status:</span>
+                        <p>
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            latestRework.status === 'Reworked' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {latestRework.status}
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Reworked By:</span>
+                        <p className="font-semibold">{latestRework.rework_by_username || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Rework Date:</span>
+                        <p className="font-semibold">{latestRework.rework_date ? new Date(latestRework.rework_date).toLocaleString() : '-'}</p>
+                      </div>
+                      {latestRework.note && (
+                        <div className="col-span-2">
+                          <span className="text-sm text-gray-600">Rework Note:</span>
+                          <p className="font-semibold bg-white p-2 rounded border border-orange-200">{latestRework.note}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Batch Information */}
               <div>

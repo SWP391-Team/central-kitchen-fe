@@ -6,6 +6,7 @@ import ProductManagement from '@/pages/Inventory/ProductManagement'
 import ProductionPlanPage from '@/pages/ProductionPlan/ProductionPlanPage'
 import ProductionBatchPage from '@/pages/ProductionBatch/ProductionBatchPage'
 import QualityInspectionPage from '@/pages/QualityInspection/QualityInspectionPage'
+import ReworkBatchPage from '@/pages/ReworkBatch/ReworkBatchPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
 import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
@@ -63,6 +64,12 @@ const AppRouter = () => {
         <Route 
           path="/quality-inspection" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><QualityInspectionPage /></ProtectedRoute>} 
+        />
+        
+        {/* Rework Batch - Admin, Central_Staff */}
+        <Route 
+          path="/rework-batch" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><ReworkBatchPage /></ProtectedRoute>} 
         />
         
         {/* User Management - Admin only */}

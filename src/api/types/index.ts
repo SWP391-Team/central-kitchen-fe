@@ -5,3 +5,4 @@ export * from './product';
 export * from './productionPlan';
 export * from './productionBatch';
 export * from './qualityInspection';
+export * from './reworkRecord';

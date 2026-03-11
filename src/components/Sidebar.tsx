@@ -56,6 +56,12 @@ const menuItems: MenuItem[] = [
     roles: [1, 2],
   },
   {
+    name: 'Rework Batch',
+    path: '/rework-batch',
+    icon: CubeIcon,
+    roles: [1, 2],
+  },
+  {
     name: 'Product Management',
     path: '/products',
     icon: ArchiveBoxIcon,
