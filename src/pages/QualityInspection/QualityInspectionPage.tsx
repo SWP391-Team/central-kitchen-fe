@@ -297,6 +297,27 @@ const QualityInspectionPage = () => {
     }
   };
 
+  const handleUndoInspection = async (inspection: QualityInspectionWithDetails) => {
+    if (window.confirm(
+      `Undo this inspection and create a new one?\n\n` +
+      `Current status: ${inspection.status}\n` +
+      `This will mark current inspection as "Incorrect Data" and create a new inspection record.`
+    )) {
+      try {
+        const result = await qualityInspectionService.undoInspection(inspection.quality_inspection_id);
+        showToast(
+          `Inspection undone! New inspection ${result.newInspection.quality_inspection_code} created.`,
+          'success'
+        );
+        loadInspections();
+        loadBatches();
+      } catch (error: any) {
+        console.error('Error undoing inspection:', error);
+        showToast(error.response?.data?.message || 'Failed to undo inspection', 'error');
+      }
+    }
+  };
+
   const handleOpenFinishModal = (inspection: QualityInspectionWithDetails) => {
     setSelectedInspection(inspection);
     
@@ -459,6 +480,7 @@ const QualityInspectionPage = () => {
       Inspecting: { color: 'bg-yellow-100 text-yellow-700', label: 'Inspecting' },
       Passed: { color: 'bg-green-100 text-green-700', label: 'Passed' },
       Failed: { color: 'bg-red-100 text-red-700', label: 'Failed' },
+      'Incorrect Data': { color: 'bg-gray-100 text-gray-700', label: 'Incorrect Data' },
     };
 
     const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-700', label: status };
@@ -781,8 +803,19 @@ const QualityInspectionPage = () => {
                                       Finish Inspection
                                     </button>
                                   )}
+                                  {(inspection.status === 'Passed' || inspection.status === 'Failed') &&
+                                   inspection.inspection_no === inspection.max_inspection_no &&
+                                   (inspection.batch_status === 'qc_failed' || inspection.batch_status === 'qc_passed' || inspection.batch_status === 'rework_required') && (
+                                    <button
+                                      onClick={() => handleUndoInspection(inspection)}
+                                      className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold"
+                                    >
+                                      Undo Inspection
+                                    </button>
+                                  )}
                                   {inspection.batch_status === 'qc_failed' && 
-                                   inspection.inspection_no === inspection.max_inspection_no && (
+                                   inspection.inspection_no === inspection.max_inspection_no && 
+                                   inspection.inspection_mode === 'sampling' && (
                                     <button
                                       onClick={() => handleReinspection(inspection)}
                                       className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"

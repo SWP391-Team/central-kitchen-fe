@@ -12,6 +12,11 @@ export const reworkRecordService = {
     return response.data;
   },
 
+  async undoFinishRework(reworkId: number) {
+    const response = await api.put(`/rework-records/${reworkId}/undo`);
+    return response.data;
+  },
+
   async sendToQC(batchId: number) {
     const response = await api.put(`/rework-records/batch/${batchId}/send-to-qc`);
     return response.data;

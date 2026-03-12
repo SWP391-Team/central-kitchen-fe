@@ -207,11 +207,33 @@ const ReworkBatchPage = () => {
     }
   };
 
+  const handleUndoFinishRework = async (rework: ReworkRecordWithDetails) => {
+    if (window.confirm(
+      `Undo this rework and create a new one?\n\n` +
+      `Current status: ${rework.status}\n` +
+      `This will mark current rework as "Incorrect Data" and create a new rework record.`
+    )) {
+      try {
+        const result = await reworkRecordService.undoFinishRework(rework.rework_id);
+        showToast(
+          result.message || `Rework undone! New rework ${result.data.newRework.rework_code} created.`,
+          'success'
+        );
+        loadReworks();
+        loadBatches();
+      } catch (error: any) {
+        console.error('Error undoing rework:', error);
+        showToast(error.response?.data?.message || 'Failed to undo rework', 'error');
+      }
+    }
+  };
+
   const getBatchStatusBadge = (status: string) => {
     const statusConfig: { [key: string]: { color: string; label: string } } = {
       rework_required: { color: 'bg-orange-100 text-orange-700', label: 'Rework Required' },
       reworking: { color: 'bg-yellow-100 text-yellow-700', label: 'Reworking' },
       reworked: { color: 'bg-green-100 text-green-700', label: 'Reworked' },
+      rework_failed: { color: 'bg-red-100 text-red-700', label: 'Rework Failed' },
     };
 
     const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-700', label: status };
@@ -226,6 +248,8 @@ const ReworkBatchPage = () => {
     const statusConfig: { [key: string]: { color: string; label: string } } = {
       Reworking: { color: 'bg-yellow-100 text-yellow-700', label: 'Reworking' },
       Reworked: { color: 'bg-green-100 text-green-700', label: 'Reworked' },
+      'Rework Failed': { color: 'bg-red-100 text-red-700', label: 'Rework Failed' },
+      'Incorrect Data': { color: 'bg-gray-100 text-gray-700', label: 'Incorrect Data' },
     };
 
     const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-700', label: status };
@@ -424,6 +448,16 @@ const ReworkBatchPage = () => {
                                   className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold"
                                 >
                                   Finish Rework
+                                </button>
+                              )}
+                              {(rework.status === 'Reworked' || rework.status === 'Rework Failed') && 
+                               rework.rework_no === rework.max_rework_no && 
+                               ['reworked', 'rework_failed', 'waiting_qc'].includes(rework.batch_status || '') && (
+                                <button
+                                  onClick={() => handleUndoFinishRework(rework)}
+                                  className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs font-semibold"
+                                >
+                                  Undo
                                 </button>
                               )}
                               {rework.status === 'Reworked' && 

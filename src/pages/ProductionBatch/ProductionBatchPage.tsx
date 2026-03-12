@@ -322,6 +322,26 @@ const ProductionBatchPage = () => {
     }
   };
 
+  const handleUndoSendToQC = async (batch: ProductionBatchWithDetails) => {
+    if (window.confirm(`Undo send to QC for batch ${batch.batch_code}? This will revert the status back to Produced.`)) {
+      try {
+        await productionBatchService.undoSendToQC(batch.batch_id);
+        
+        await loadPlans();
+        
+        if (activeTab === 'batches') {
+          await loadAllBatches();
+        }
+        
+        showToast('Undo send to QC successfully! Batch status reverted to Produced.', 'success');
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || 'Failed to undo send to QC';
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
+      }
+    }
+  };
+
   const today = new Date().toISOString().split('T')[0];
 
   const getPlanByIdFromBatch = (planId: number) => {
@@ -625,6 +645,14 @@ const ProductionBatchPage = () => {
                                       className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs font-semibold"
                                     >
                                       Send to QC
+                                    </button>
+                                  )}
+                                  {batch.status === 'waiting_qc' && (
+                                    <button
+                                      onClick={() => handleUndoSendToQC(batch)}
+                                      className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs font-semibold"
+                                    >
+                                      Undo
                                     </button>
                                   )}
                                   {(batch.status === 'producing' || batch.status === 'produced') && (

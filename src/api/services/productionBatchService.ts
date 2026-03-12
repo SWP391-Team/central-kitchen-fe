@@ -42,6 +42,11 @@ export const productionBatchService = {
     return response.data.data;
   },
 
+  undoSendToQC: async (batchId: number): Promise<ProductionBatchWithDetails> => {
+    const response = await api.put<ApiResponse<ProductionBatchWithDetails>>(`/production-batches/${batchId}/undo-send-to-qc`);
+    return response.data.data;
+  },
+
   getAllBatches: async (): Promise<ProductionBatchWithDetails[]> => {
     const response = await api.get<ApiResponse<ProductionBatchWithDetails[]>>('/production-batches/all');
     return response.data.data;

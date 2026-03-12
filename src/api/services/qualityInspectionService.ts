@@ -103,6 +103,19 @@ class QualityInspectionService {
     );
     return response.data.data;
   }
+
+  async undoInspection(inspectionId: number): Promise<{
+    oldInspection: QualityInspectionWithDetails;
+    newInspection: QualityInspectionWithDetails;
+    batch: ProductionBatch;
+  }> {
+    const response = await api.put<ApiResponse<{
+      oldInspection: QualityInspectionWithDetails;
+      newInspection: QualityInspectionWithDetails;
+      batch: ProductionBatch;
+    }>>(`/quality-inspections/${inspectionId}/undo`);
+    return response.data.data;
+  }
 }
 
 export const qualityInspectionService = new QualityInspectionService();
