@@ -5,6 +5,7 @@ export const storeService = {
   getStores: async (params?: {
     search?: string;
     is_active?: boolean;
+    location_type?: 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE';
     page?: number;
     limit?: number;
   }): Promise<ApiResponse<Store[]>> => {

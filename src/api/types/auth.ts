@@ -1,4 +1,3 @@
-// Authentication related types
 export interface LoginRequest {
   username: string;
   password: string;
@@ -11,6 +10,7 @@ export interface LoginResponse {
     user_code: string;
     username: string;
     role_id: number;
-    store_id: number | null;
+    location_id: number | null;
+    location_ids: number[];
   };
 }

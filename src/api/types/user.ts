@@ -3,7 +3,8 @@ export interface User {
   user_code: string;
   username: string;
   role_id: number;
-  store_id: number | null;
+  location_id: number | null;
+  location_ids: number[];
   is_active: boolean;
   created_at: string;
   updated_at?: Date;
@@ -14,7 +15,8 @@ export interface UserCreateRequest {
   username: string;
   password: string;
   role_id: number;
-  store_id?: number | null;
+  location_id?: number | null;
+  location_ids?: number[];
   is_active?: boolean;
 }
 
@@ -23,7 +25,8 @@ export interface UserUpdateRequest {
   username?: string;
   password?: string;
   role_id?: number;
-  store_id?: number | null;
+  location_id?: number | null;
+  location_ids?: number[];
   is_active?: boolean;
 }
 

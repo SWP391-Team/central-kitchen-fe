@@ -26,7 +26,8 @@ const LoginPage = () => {
         user_code: response.user.user_code,
         username: response.user.username,
         role_id: response.user.role_id,
-        store_id: response.user.store_id,
+        location_id: response.user.location_id,
+        location_ids: response.user.location_ids || (response.user.location_id ? [response.user.location_id] : []),
         is_active: true,
         created_at: new Date().toISOString(),
       });

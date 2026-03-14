@@ -1,23 +1,26 @@
 export interface Store {
-  store_id: number;
-  store_code: string;
-  store_name: string;
-  store_address: string;
+  location_id: number;
+  location_code: string;
+  location_name: string;
+  location_address: string;
+  location_type: 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE';
   is_active: boolean;
   created_at: string;
   updated_at?: Date;
 }
 
 export interface StoreCreateRequest {
-  store_code: string;
-  store_name: string;
-  store_address: string;
+  location_code: string;
+  location_name: string;
+  location_address: string;
+  location_type: 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE';
   is_active?: boolean;
 }
 
 export interface StoreUpdateRequest {
-  store_code?: string; 
-  store_name?: string;
-  store_address?: string;
+  location_code?: string; 
+  location_name?: string;
+  location_address?: string;
+  location_type?: 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE';
   is_active?: boolean;
 }

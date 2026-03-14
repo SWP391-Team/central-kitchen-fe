@@ -109,8 +109,8 @@ const Sidebar = () => {
     
     const filtered = subItems.map((subItem) => {
       let path = subItem.path;
-      if (path.includes(':storeId') && user.store_id) {
-        path = path.replace(':storeId', user.store_id.toString());
+      if (path.includes(':storeId') && user.location_id) {
+        path = path.replace(':storeId', user.location_id.toString());
       }
       
       return {

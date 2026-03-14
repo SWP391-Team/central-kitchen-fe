@@ -13,16 +13,25 @@ const UserManagementPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<number | 'all'>('all');
   const [filterStore, setFilterStore] = useState<number | 'all'>('all');
-  const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'store_id'>('user_id');
+  const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'location_id'>('user_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
     user_code: '',
     username: '',
     password: '',
     role_id: 2,
-    store_id: null,
+    location_id: null,
+    location_ids: [],
     is_active: true,
   });
+
+  const getUserLocationIds = (user: User): number[] => {
+    if (Array.isArray(user.location_ids) && user.location_ids.length > 0) {
+      return user.location_ids;
+    }
+
+    return user.location_id ? [user.location_id] : [];
+  };
 
   useEffect(() => {
     loadUsers();
@@ -61,7 +70,8 @@ const UserManagementPage = () => {
         username: user.username,
         password: '',
         role_id: user.role_id,
-        store_id: user.store_id,
+        location_id: user.location_id,
+        location_ids: getUserLocationIds(user),
         is_active: user.is_active,
       });
     } else {
@@ -71,7 +81,8 @@ const UserManagementPage = () => {
         username: '',
         password: '',
         role_id: 2,
-        store_id: null,
+        location_id: null,
+        location_ids: [],
         is_active: true,
       });
     }
@@ -86,8 +97,30 @@ const UserManagementPage = () => {
       username: '',
       password: '',
       role_id: 2,
-      store_id: null,
+      location_id: null,
+      location_ids: [],
       is_active: true,
+    });
+  };
+
+  const getSelectedLocationIdsFromForm = (): number[] => {
+    if (Array.isArray(formData.location_ids) && formData.location_ids.length > 0) {
+      return formData.location_ids;
+    }
+
+    return formData.location_id ? [formData.location_id] : [];
+  };
+
+  const handleToggleLocation = (locationId: number) => {
+    const selectedLocationIds = getSelectedLocationIdsFromForm();
+    const nextLocationIds = selectedLocationIds.includes(locationId)
+      ? selectedLocationIds.filter((id) => id !== locationId)
+      : [...selectedLocationIds, locationId];
+
+    setFormData({
+      ...formData,
+      location_ids: nextLocationIds,
+      location_id: nextLocationIds[0] ?? null,
     });
   };
 
@@ -96,15 +129,25 @@ const UserManagementPage = () => {
     setError('');
 
     try {
+      const selectedLocationIds = Array.from(new Set(getSelectedLocationIdsFromForm()));
+
       if (editingUser) {
-        const updateData: UserUpdateRequest = { ...formData };
+        const updateData: UserUpdateRequest = {
+          ...formData,
+          location_ids: selectedLocationIds,
+          location_id: selectedLocationIds[0] ?? null,
+        };
         if (!updateData.password) {
           delete updateData.password; 
         }
         delete (updateData as any).user_code;
         await userService.updateUser(editingUser.user_id, updateData);
       } else {
-        const createData = { ...formData } as UserCreateRequest;
+        const createData = {
+          ...formData,
+          location_ids: selectedLocationIds,
+          location_id: selectedLocationIds[0] ?? null,
+        } as UserCreateRequest;
         
         const userCodePattern = /^USR-\d{4}$/;
         if (!createData.user_code || !userCodePattern.test(createData.user_code.toUpperCase())) {
@@ -156,16 +199,24 @@ const UserManagementPage = () => {
     return roles[roleId] || 'Unknown';
   };
 
-  const getStoreName = (storeId: number | null) => {
-    if (!storeId) return '-';
-    const store = stores.find(s => s.store_id === storeId);
-    return store ? store.store_name : `Store #${storeId}`;
+  const getStoreName = (locationId: number | null) => {
+    if (!locationId) return '-';
+    const location = stores.find(s => s.location_id === locationId);
+    return location ? location.location_name : `Location #${locationId}`;
   };
 
-  const getStoreAddress = (storeId: number | null) => {
-    if (!storeId) return '-';
-    const store = stores.find(s => s.store_id === storeId);
-    return store ? store.store_address : '-';
+  const getStoreNames = (locationIds: number[] | undefined) => {
+    if (!locationIds || locationIds.length === 0) return '-';
+
+    return locationIds
+      .map((locationId) => getStoreName(locationId))
+      .join(', ');
+  };
+
+  const getStoreAddress = (locationId: number | null) => {
+    if (!locationId) return '-';
+    const location = stores.find(s => s.location_id === locationId);
+    return location ? location.location_address : '-';
   };
 
   const filteredAndSortedUsers = users
@@ -174,11 +225,11 @@ const UserManagementPage = () => {
         user.user_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getRoleName(user.role_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStoreName(user.store_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStoreAddress(user.store_id).toLowerCase().includes(searchTerm.toLowerCase());
+        getStoreNames(getUserLocationIds(user)).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        getStoreAddress(user.location_id).toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesRole = filterRole === 'all' || user.role_id === filterRole;
-      const matchesStore = filterStore === 'all' || user.store_id === filterStore;
+      const matchesStore = filterStore === 'all' || getUserLocationIds(user).includes(filterStore);
       
       return matchesSearch && matchesRole && matchesStore;
     })
@@ -195,9 +246,9 @@ const UserManagementPage = () => {
         case 'role_id':
           compareValue = a.role_id - b.role_id;
           break;
-        case 'store_id':
-          const storeNameA = getStoreName(a.store_id);
-          const storeNameB = getStoreName(b.store_id);
+        case 'location_id':
+          const storeNameA = getStoreNames(getUserLocationIds(a));
+          const storeNameB = getStoreNames(getUserLocationIds(b));
           compareValue = storeNameA.localeCompare(storeNameB);
           break;
       }
@@ -313,21 +364,21 @@ const UserManagementPage = () => {
             >
               <option value="all">All Stores</option>
               {stores.map(store => (
-                <option key={store.store_id} value={store.store_id}>
-                  {store.store_name}
+                <option key={store.location_id} value={store.location_id}>
+                  {store.location_name}
                 </option>
               ))}
             </select>
             <div className="flex gap-2">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'user_id' | 'username' | 'role_id' | 'store_id')}
+                onChange={(e) => setSortBy(e.target.value as 'user_id' | 'username' | 'role_id' | 'location_id')}
                 className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all flex-1"
               >
                 <option value="user_id">Sort by ID</option>
                 <option value="username">Sort by Username</option>
                 <option value="role_id">Sort by Role</option>
-                <option value="store_id">Sort by Store</option>
+                <option value="location_id">Sort by Location</option>
               </select>
               <button
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
@@ -381,10 +432,10 @@ const UserManagementPage = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-gray-700 font-medium">{getStoreName(user.store_id)}</span>
+                  <span className="text-gray-700 font-medium">{getStoreNames(getUserLocationIds(user))}</span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className="text-gray-600 text-sm">{getStoreAddress(user.store_id)}</span>
+                  <span className="text-gray-600 text-sm">{getStoreAddress(user.location_id)}</span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <button
@@ -521,23 +572,39 @@ const UserManagementPage = () => {
                 <div>
                   <label className="block text-gray-700 font-semibold mb-2 flex items-center">
                     <span className="mr-2"></span>
-                    Store <span className="text-sm text-gray-500 ml-2">(optional)</span>
+                    Stores <span className="text-sm text-gray-500 ml-2">(optional, multi-select)</span>
                   </label>
-                  <select
-                    value={formData.store_id || ''}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      store_id: e.target.value ? parseInt(e.target.value) : null 
+                  <div className="w-full border-2 border-gray-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+                    {stores.length === 0 && (
+                      <p className="text-sm text-gray-500">No active stores found.</p>
+                    )}
+
+                    {stores.map((store) => {
+                      const checked = getSelectedLocationIdsFromForm().includes(store.location_id);
+
+                      return (
+                        <label
+                          key={store.location_id}
+                          className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleToggleLocation(store.location_id)}
+                            className="mt-1 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                          />
+                          <div className="text-sm">
+                            <p className="font-medium text-gray-800">{store.location_name}</p>
+                            <p className="text-gray-500">{store.location_address}</p>
+                          </div>
+                        </label>
+                      );
                     })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
-                  >
-                    <option value="">No Store</option>
-                    {stores.map(store => (
-                      <option key={store.store_id} value={store.store_id}>
-                        {store.store_name} ({store.store_address})
-                      </option>
-                    ))}
-                  </select>
+                  </div>
+
+                  <p className="text-sm text-gray-500 mt-1">
+                    Selected: {getSelectedLocationIdsFromForm().length === 0 ? 'None' : getStoreNames(getSelectedLocationIdsFromForm())}
+                  </p>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4">

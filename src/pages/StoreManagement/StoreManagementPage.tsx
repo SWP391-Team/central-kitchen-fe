@@ -12,13 +12,15 @@ const StoreManagementPage = () => {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<'store_id' | 'store_name' | 'status'>('store_id');
+  const [sortBy, setSortBy] = useState<'location_id' | 'location_name' | 'status'>('location_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [filterType, setFilterType] = useState<'all' | 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE'>('all');
   
   const [formData, setFormData] = useState<StoreCreateRequest>({
-    store_code: '',
-    store_name: '',
-    store_address: '',
+    location_code: '',
+    location_name: '',
+    location_address: '',
+    location_type: 'STORE',
     is_active: true,
   });
 
@@ -30,13 +32,14 @@ const StoreManagementPage = () => {
       const params: any = {};
       if (searchTerm) params.search = searchTerm;
       if (filterStatus !== 'all') params.is_active = filterStatus === 'active';
+      if (filterType !== 'all') params.location_type = filterType;
       
       const response = await storeService.getStores(params);
       if (response.success) {
         setStores(response.data);
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to fetch stores');
+      setError(err.response?.data?.message || 'Failed to fetch locations');
       console.error('Error fetching stores:', err);
     } finally {
       setLoading(false);
@@ -45,7 +48,7 @@ const StoreManagementPage = () => {
 
   useEffect(() => {
     fetchStores();
-  }, [searchTerm, filterStatus]);
+  }, [searchTerm, filterStatus, filterType]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -55,9 +58,10 @@ const StoreManagementPage = () => {
   const handleCreateNew = () => {
     setEditingStore(null);
     setFormData({
-      store_code: '',
-      store_name: '',
-      store_address: '',
+      location_code: '',
+      location_name: '',
+      location_address: '',
+      location_type: 'STORE',
       is_active: true,
     });
     setShowModal(true);
@@ -66,9 +70,10 @@ const StoreManagementPage = () => {
   const handleEdit = (store: Store) => {
     setEditingStore(store);
     setFormData({
-      store_code: store.store_code,
-      store_name: store.store_name,
-      store_address: store.store_address,
+      location_code: store.location_code,
+      location_name: store.location_name,
+      location_address: store.location_address,
+      location_type: store.location_type,
       is_active: store.is_active,
     });
     setShowModal(true);
@@ -81,36 +86,37 @@ const StoreManagementPage = () => {
     try {
       if (editingStore) {
         const updateData: StoreUpdateRequest = {
-          store_name: formData.store_name,
-          store_address: formData.store_address,
+          location_name: formData.location_name,
+          location_address: formData.location_address,
+          location_type: formData.location_type,
         };
-        delete (updateData as any).store_code;
-        const response = await storeService.updateStore(editingStore.store_id, updateData);
+        delete (updateData as any).location_code;
+        const response = await storeService.updateStore(editingStore.location_id, updateData);
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          showToast('Store updated successfully!', 'success');
+          showToast('Location updated successfully!', 'success');
         }
       } else {
         const createData = { ...formData } as StoreCreateRequest;
         
-        const storeCodePattern = /^ST-[A-Z0-9]{3}-[A-Z0-9]{4}$/;
-        if (!createData.store_code || !storeCodePattern.test(createData.store_code.toUpperCase())) {
-          setError('Store code must be in format ST-XXX-XXXX (e.g., ST-HCM-0001)');
+        const locationCodePattern = /^[A-Z][A-Z0-9_-]{2,31}$/;
+        if (!createData.location_code || !locationCodePattern.test(createData.location_code.toUpperCase())) {
+          setError('Location code must be 3-32 chars and use A-Z, 0-9, _, -');
           return;
         }
         
-        createData.store_code = createData.store_code.toUpperCase();
+        createData.location_code = createData.location_code.toUpperCase();
         
         const response = await storeService.createStore(createData);
         if (response.success) {
           setShowModal(false);
           fetchStores();
-          showToast('Store created successfully!', 'success');
+          showToast('Location created successfully!', 'success');
         }
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to save store');
+      setError(err.response?.data?.message || 'Failed to save location');
       console.error('Error saving store:', err);
     }
   };
@@ -118,32 +124,34 @@ const StoreManagementPage = () => {
   const handleToggleStatus = async (store: Store) => {
     const action = store.is_active ? 'deactivate' : 'activate';
     const confirmMessage = store.is_active
-      ? `Are you sure you want to deactivate "${store.store_name}"? Users assigned to this store will be blocked from login.`
-      : `Are you sure you want to activate "${store.store_name}"?`;
+      ? `Are you sure you want to deactivate "${store.location_name}"? Users assigned to this location will be blocked from login.`
+      : `Are you sure you want to activate "${store.location_name}"?`;
 
     if (window.confirm(confirmMessage)) {
       try {
-        const response = await storeService.toggleStoreStatus(store.store_id, !store.is_active);
+        const response = await storeService.toggleStoreStatus(store.location_id, !store.is_active);
         if (response.success) {
           fetchStores();
-          showToast(`Store ${action}d successfully!`, 'success');
+          showToast(`Location ${action}d successfully!`, 'success');
         }
       } catch (err: any) {
-        showToast(err.response?.data?.message || `Failed to ${action} store`, 'error');
+        showToast(err.response?.data?.message || `Failed to ${action} location`, 'error');
         console.error(`Error ${action}ing store:`, err);
       }
     }
   };
 
-  const filteredStores = [...stores].sort((a, b) => {
+  const filteredStores = stores
+    .filter((store) => filterType === 'all' || store.location_type === filterType)
+    .sort((a, b) => {
     let compareValue = 0;
     
     switch (sortBy) {
-      case 'store_id':
-        compareValue = a.store_id - b.store_id;
+      case 'location_id':
+        compareValue = a.location_id - b.location_id;
         break;
-      case 'store_name':
-        compareValue = a.store_name.localeCompare(b.store_name);
+      case 'location_name':
+        compareValue = a.location_name.localeCompare(b.location_name);
         break;
       case 'status':
         compareValue = (a.is_active === b.is_active) ? 0 : a.is_active ? -1 : 1;
@@ -162,7 +170,7 @@ const StoreManagementPage = () => {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading stores...</p>
+          <p className="mt-4 text-gray-600">Loading locations...</p>
         </div>
       </div>
     );
@@ -171,12 +179,12 @@ const StoreManagementPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Store Management</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Location Management</h1>
         <button
           onClick={handleCreateNew}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          Add New Store
+          Add New Location
         </button>
       </div>
 
@@ -186,18 +194,18 @@ const StoreManagementPage = () => {
         </div>
       )}
 
-      {/* Store Statistics */}
+      {/* Location Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-500">Total Stores</p>
+          <p className="text-sm font-medium text-gray-500">Total Locations</p>
           <p className="text-2xl font-semibold text-gray-900 mt-2">{totalStores}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-500">Active Stores</p>
+          <p className="text-sm font-medium text-gray-500">Active Locations</p>
           <p className="text-2xl font-semibold text-green-600 mt-2">{activeStores}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-sm font-medium text-gray-500">Inactive Stores</p>
+          <p className="text-sm font-medium text-gray-500">Inactive Locations</p>
           <p className="text-2xl font-semibold text-red-600 mt-2">{inactiveStores}</p>
         </div>
       </div>
@@ -207,11 +215,21 @@ const StoreManagementPage = () => {
         <div className="flex flex-wrap gap-4">
           <input
             type="text"
-            placeholder="Search by store code, name or address..."
+            placeholder="Search by location code, name or address..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[300px]"
           />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as 'all' | 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE')}
+            className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Types</option>
+            <option value="CK_PRODUCTION">CK Production</option>
+            <option value="CK_WAREHOUSE">CK Warehouse</option>
+            <option value="STORE">Store</option>
+          </select>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
@@ -224,11 +242,11 @@ const StoreManagementPage = () => {
           <div className="flex gap-2">
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'store_id' | 'store_name' | 'status')}
+              onChange={(e) => setSortBy(e.target.value as 'location_id' | 'location_name' | 'status')}
               className="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1"
             >
-              <option value="store_id">Sort by ID</option>
-              <option value="store_name">Sort by Name</option>
+              <option value="location_id">Sort by ID</option>
+              <option value="location_name">Sort by Name</option>
               <option value="status">Sort by Status</option>
             </select>
             <button
@@ -242,22 +260,25 @@ const StoreManagementPage = () => {
         </div>
       </div>
 
-      {/* Stores Table */}
+      {/* Locations Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Store ID
+                Location ID
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Store Code
+                Location Code
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Store Name
+                Location Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Address
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Type
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
@@ -270,24 +291,27 @@ const StoreManagementPage = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredStores.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                  No stores found
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                  No locations found
                 </td>
               </tr>
             ) : (
               filteredStores.map((store) => (
-                <tr key={store.store_id} className="hover:bg-gray-50">
+                <tr key={store.location_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {store.store_id}
+                    {store.location_id}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
-                    {store.store_code}
+                    {store.location_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {store.store_name}
+                    {store.location_name}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {store.store_address}
+                    {store.location_address}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {store.location_type}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
@@ -337,7 +361,7 @@ const StoreManagementPage = () => {
         </table>
       </div>
 
-      {/* Modal for Create/Edit Store */}
+      {/* Modal for Create/Edit Location */}
       {showModal && (
         <div 
           className="fixed inset-0 flex items-center justify-center z-[9999]"
@@ -349,64 +373,84 @@ const StoreManagementPage = () => {
             style={{ boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.3)' }}
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {editingStore ? 'Edit Store' : 'Create New Store'}
+              {editingStore ? 'Edit Location' : 'Create New Location'}
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Store Code *
+                  Location Code *
                 </label>
                 <input
                   type="text"
-                  name="store_code"
-                  value={formData.store_code}
-                  onChange={(e) => setFormData({ ...formData, store_code: e.target.value.toUpperCase() })}
+                  name="location_code"
+                  value={formData.location_code}
+                  onChange={(e) => setFormData({ ...formData, location_code: e.target.value.toUpperCase() })}
                   required
                   disabled={!!editingStore}
                   readOnly={!!editingStore}
-                  pattern="ST-[A-Z0-9]{3}-[A-Z0-9]{4}"
-                  title="Format: ST-XXX-XXXX (e.g., ST-HCM-0001)"
+                  pattern="[A-Z][A-Z0-9_-]{2,31}"
+                  title="3-32 chars and only A-Z, 0-9, _, -"
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
                   style={editingStore ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                  placeholder="ST-HCM-0001"
+                  placeholder="CKP_HCM_001"
                 />
                 {editingStore && (
-                  <p className="text-xs text-gray-500 mt-1">⚠️ Store code cannot be modified after creation</p>
+                  <p className="text-xs text-gray-500 mt-1">⚠️ Location code cannot be modified after creation</p>
                 )}
                 {!editingStore && (
-                  <p className="text-xs text-gray-500 mt-1">Format: ST-XXX-XXXX (e.g., ST-HCM-0001, ST-HNI-0001)</p>
+                  <p className="text-xs text-gray-500 mt-1">Example: CKP_HCM_001, CKW_HCM_001, STO_HCM_001</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Store Name *
+                  Location Name *
                 </label>
                 <input
                   type="text"
-                  name="store_name"
-                  value={formData.store_name}
+                  name="location_name"
+                  value={formData.location_name}
                   onChange={handleInputChange}
                   required
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter store name"
+                  placeholder="Enter location name"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Store Address *
+                  Location Address *
                 </label>
                 <textarea
-                  name="store_address"
-                  value={formData.store_address}
+                  name="location_address"
+                  value={formData.location_address}
                   onChange={handleInputChange}
                   required
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter store address"
+                  placeholder="Enter location address"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location Type *
+                </label>
+                <select
+                  name="location_type"
+                  value={formData.location_type}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    location_type: e.target.value as 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE',
+                  })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="CK_PRODUCTION">CK Production</option>
+                  <option value="CK_WAREHOUSE">CK Warehouse</option>
+                  <option value="STORE">Store</option>
+                </select>
               </div>
 
               {error && (
@@ -418,7 +462,7 @@ const StoreManagementPage = () => {
                   type="submit"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
                 >
-                  {editingStore ? 'Update Store' : 'Create Store'}
+                  {editingStore ? 'Update Location' : 'Create Location'}
                 </button>
                 <button
                   type="button"
