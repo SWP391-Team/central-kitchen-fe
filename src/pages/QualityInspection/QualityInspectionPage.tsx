@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { productionBatchService } from '@/api/services/productionBatchService';
 import { qualityInspectionService } from '@/api/services/qualityInspectionService';
 import { reworkRecordService } from '@/api/services/reworkRecordService';
@@ -50,6 +50,7 @@ const QualityInspectionPage = () => {
   const [finishing, setFinishing] = useState(false);
 
   const [batchReworksMap, setBatchReworksMap] = useState<Record<number, ReworkRecordWithDetails[]>>({});
+  const batchReworksCacheRef = useRef<Record<number, ReworkRecordWithDetails[]>>({});
 
   useEffect(() => {
     if (activeTab === 'batches') {
@@ -130,21 +131,43 @@ const QualityInspectionPage = () => {
     }
   };
 
+  const loadReworkDataByBatchIds = async (batchIds: number[]) => {
+    const uniqueBatchIds = Array.from(new Set(batchIds));
+    if (uniqueBatchIds.length === 0) return;
+
+    const missingBatchIds = uniqueBatchIds.filter(
+      (batchId) => batchReworksCacheRef.current[batchId] === undefined
+    );
+
+    if (missingBatchIds.length === 0) {
+      setBatchReworksMap({ ...batchReworksCacheRef.current });
+      return;
+    }
+
+    const reworkResults = await Promise.all(
+      missingBatchIds.map(async (batchId) => {
+        try {
+          const reworks = await reworkRecordService.getReworksByBatchId(batchId);
+          return { batchId, reworks };
+        } catch {
+          return { batchId, reworks: [] as ReworkRecordWithDetails[] };
+        }
+      })
+    );
+
+    const nextCache = { ...batchReworksCacheRef.current };
+    reworkResults.forEach(({ batchId, reworks }) => {
+      nextCache[batchId] = reworks;
+    });
+
+    batchReworksCacheRef.current = nextCache;
+    setBatchReworksMap({ ...nextCache });
+  };
+
   const loadReworkDataForBatches = async (batchList: ProductionBatchWithDetails[]) => {
     try {
-      const reworkMap: Record<number, ReworkRecordWithDetails[]> = {};
-      
-      for (const batch of batchList) {
-        try {
-          const reworks = await reworkRecordService.getReworksByBatchId(batch.batch_id);
-          if (reworks && reworks.length > 0) {
-            reworkMap[batch.batch_id] = reworks;
-          }
-        } catch (error) {
-        }
-      }
-      
-      setBatchReworksMap(reworkMap);
+      const batchIds = batchList.map((batch) => batch.batch_id);
+      await loadReworkDataByBatchIds(batchIds);
     } catch (error) {
       console.error('Error loading rework data:', error);
     }
@@ -152,19 +175,8 @@ const QualityInspectionPage = () => {
 
   const loadReworkDataForInspections = async (inspectionList: QualityInspectionWithDetails[]) => {
     try {
-      const reworkMap: Record<number, ReworkRecordWithDetails[]> = {};
-      
-      for (const inspection of inspectionList) {
-        try {
-          const reworks = await reworkRecordService.getReworksByBatchId(inspection.batch_id);
-          if (reworks && reworks.length > 0) {
-            reworkMap[inspection.batch_id] = reworks;
-          }
-        } catch (error) {
-        }
-      }
-      
-      setBatchReworksMap(reworkMap);
+      const batchIds = inspectionList.map((inspection) => inspection.batch_id);
+      await loadReworkDataByBatchIds(batchIds);
     } catch (error) {
       console.error('Error loading rework data:', error);
     }

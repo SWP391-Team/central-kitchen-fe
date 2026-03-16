@@ -6,3 +6,6 @@ export * from './productionPlan';
 export * from './productionBatch';
 export * from './qualityInspection';
 export * from './reworkRecord';
+export * from './batchTransfer';
+export * from './warehouseReceive';
+export * from './inventory';

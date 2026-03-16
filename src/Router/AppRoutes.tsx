@@ -10,6 +10,8 @@ import ReworkBatchPage from '@/pages/ReworkBatch/ReworkBatchPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
 import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
+import WarehouseReceivePage from '@/pages/WarehouseReceive/WarehouseReceivePage'
+import InventoryPage from '@/pages/InventoryPage/InventoryPage'
 import { useAuth } from '@/contexts/AuthContext'
 
 const ProtectedRoute = ({ 
@@ -70,6 +72,18 @@ const AppRouter = () => {
         <Route 
           path="/rework-batch" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><ReworkBatchPage /></ProtectedRoute>} 
+        />
+        
+        {/* Warehouse Receive - Admin, Central_Staff */}
+        <Route 
+          path="/warehouse-receive" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><WarehouseReceivePage /></ProtectedRoute>} 
+        />
+        
+        {/* Inventory - All roles (server filters by location) */}
+        <Route 
+          path="/inventory" 
+          element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} 
         />
         
         {/* User Management - Admin only */}

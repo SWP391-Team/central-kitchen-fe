@@ -13,6 +13,8 @@ import {
   ClipboardDocumentListIcon,
   CubeIcon,
   ClipboardDocumentCheckIcon,
+  TruckIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline';
 
 interface SubMenuItem {
@@ -60,6 +62,18 @@ const menuItems: MenuItem[] = [
     path: '/rework-batch',
     icon: CubeIcon,
     roles: [1, 2],
+  },
+  {
+    name: 'Warehouse Receive',
+    path: '/warehouse-receive',
+    icon: TruckIcon,
+    roles: [1, 2],
+  },
+  {
+    name: 'Inventory',
+    path: '/inventory',
+    icon: CircleStackIcon,
+    roles: [1, 2, 3],
   },
   {
     name: 'Product Management',
