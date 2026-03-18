@@ -52,6 +52,12 @@ const menuItems: MenuItem[] = [
     roles: [1, 2],
   },
   {
+    name: 'Batch Transfer',
+    path: '/batch-transfer',
+    icon: TruckIcon,
+    roles: [1, 2],
+  },
+  {
     name: 'Quality Inspection',
     path: '/quality-inspection',
     icon: ClipboardDocumentCheckIcon,
@@ -82,8 +88,8 @@ const menuItems: MenuItem[] = [
     roles: [1, 2], 
   },
   {
-    name: 'Store Management',
-    path: '/stores',
+    name: 'Location Management',
+    path: '/locations',
     icon: BuildingStorefrontIcon,
     roles: [1], 
   },

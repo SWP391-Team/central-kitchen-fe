@@ -1,4 +1,4 @@
-export interface Store {
+export interface Location {
   location_id: number;
   location_code: string;
   location_name: string;
@@ -9,7 +9,7 @@ export interface Store {
   updated_at?: Date;
 }
 
-export interface StoreCreateRequest {
+export interface LocationCreateRequest {
   location_code: string;
   location_name: string;
   location_address: string;
@@ -17,7 +17,7 @@ export interface StoreCreateRequest {
   is_active?: boolean;
 }
 
-export interface StoreUpdateRequest {
+export interface LocationUpdateRequest {
   location_code?: string; 
   location_name?: string;
   location_address?: string;

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
-import { storeService } from '@/api/services/storeService';
-import { User, UserCreateRequest, UserUpdateRequest, Store } from '@/api/types';
+import { locationService } from '@/api/services/locationService';
+import { User, UserCreateRequest, UserUpdateRequest, Location } from '@/api/types';
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
+  const [stores, setStores] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -53,7 +53,7 @@ const UserManagementPage = () => {
 
   const loadStores = async () => {
     try {
-      const response = await storeService.getStores({ is_active: true });
+      const response = await locationService.getLocations({ is_active: true });
       if (response.success) {
         setStores(response.data);
       }

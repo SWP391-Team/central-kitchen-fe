@@ -1,22 +1,22 @@
 import { useState, useEffect } from 'react';
-import { storeService } from '@/api/services/storeService';
-import { Store, StoreCreateRequest, StoreUpdateRequest } from '@/api/types';
+import { locationService } from '@/api/services/locationService';
+import { Location, LocationCreateRequest, LocationUpdateRequest } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 
-const StoreManagementPage = () => {
+const LocationManagementPage = () => {
   const { showToast } = useToast();
-  const [stores, setStores] = useState<Store[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [editingStore, setEditingStore] = useState<Store | null>(null);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [sortBy, setSortBy] = useState<'location_id' | 'location_name' | 'status'>('location_id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [filterType, setFilterType] = useState<'all' | 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE'>('all');
   
-  const [formData, setFormData] = useState<StoreCreateRequest>({
+  const [formData, setFormData] = useState<LocationCreateRequest>({
     location_code: '',
     location_name: '',
     location_address: '',
@@ -24,7 +24,7 @@ const StoreManagementPage = () => {
     is_active: true,
   });
 
-  const fetchStores = async () => {
+  const fetchLocations = async () => {
     try {
       setLoading(true);
       setError('');
@@ -34,20 +34,20 @@ const StoreManagementPage = () => {
       if (filterStatus !== 'all') params.is_active = filterStatus === 'active';
       if (filterType !== 'all') params.location_type = filterType;
       
-      const response = await storeService.getStores(params);
+      const response = await locationService.getLocations(params);
       if (response.success) {
-        setStores(response.data);
+        setLocations(response.data);
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch locations');
-      console.error('Error fetching stores:', err);
+      console.error('Error fetching locations:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStores();
+    fetchLocations();
   }, [searchTerm, filterStatus, filterType]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -56,7 +56,7 @@ const StoreManagementPage = () => {
   };
 
   const handleCreateNew = () => {
-    setEditingStore(null);
+    setEditingLocation(null);
     setFormData({
       location_code: '',
       location_name: '',
@@ -67,14 +67,14 @@ const StoreManagementPage = () => {
     setShowModal(true);
   };
 
-  const handleEdit = (store: Store) => {
-    setEditingStore(store);
+  const handleEdit = (location: Location) => {
+    setEditingLocation(location);
     setFormData({
-      location_code: store.location_code,
-      location_name: store.location_name,
-      location_address: store.location_address,
-      location_type: store.location_type,
-      is_active: store.is_active,
+      location_code: location.location_code,
+      location_name: location.location_name,
+      location_address: location.location_address,
+      location_type: location.location_type,
+      is_active: location.is_active,
     });
     setShowModal(true);
   };
@@ -84,21 +84,21 @@ const StoreManagementPage = () => {
     setError('');
 
     try {
-      if (editingStore) {
-        const updateData: StoreUpdateRequest = {
+      if (editingLocation) {
+        const updateData: LocationUpdateRequest = {
           location_name: formData.location_name,
           location_address: formData.location_address,
           location_type: formData.location_type,
         };
         delete (updateData as any).location_code;
-        const response = await storeService.updateStore(editingStore.location_id, updateData);
+        const response = await locationService.updateLocation(editingLocation.location_id, updateData);
         if (response.success) {
           setShowModal(false);
-          fetchStores();
+          fetchLocations();
           showToast('Location updated successfully!', 'success');
         }
       } else {
-        const createData = { ...formData } as StoreCreateRequest;
+        const createData = { ...formData } as LocationCreateRequest;
         
         const locationCodePattern = /^[A-Z][A-Z0-9_-]{2,31}$/;
         if (!createData.location_code || !locationCodePattern.test(createData.location_code.toUpperCase())) {
@@ -108,41 +108,41 @@ const StoreManagementPage = () => {
         
         createData.location_code = createData.location_code.toUpperCase();
         
-        const response = await storeService.createStore(createData);
+        const response = await locationService.createLocation(createData);
         if (response.success) {
           setShowModal(false);
-          fetchStores();
+          fetchLocations();
           showToast('Location created successfully!', 'success');
         }
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to save location');
-      console.error('Error saving store:', err);
+      console.error('Error saving location:', err);
     }
   };
 
-  const handleToggleStatus = async (store: Store) => {
-    const action = store.is_active ? 'deactivate' : 'activate';
-    const confirmMessage = store.is_active
-      ? `Are you sure you want to deactivate "${store.location_name}"? Users assigned to this location will be blocked from login.`
-      : `Are you sure you want to activate "${store.location_name}"?`;
+  const handleToggleStatus = async (location: Location) => {
+    const action = location.is_active ? 'deactivate' : 'activate';
+    const confirmMessage = location.is_active
+      ? `Are you sure you want to deactivate "${location.location_name}"? Users assigned to this location will be blocked from login.`
+      : `Are you sure you want to activate "${location.location_name}"?`;
 
     if (window.confirm(confirmMessage)) {
       try {
-        const response = await storeService.toggleStoreStatus(store.location_id, !store.is_active);
+        const response = await locationService.toggleLocationStatus(location.location_id, !location.is_active);
         if (response.success) {
-          fetchStores();
+          fetchLocations();
           showToast(`Location ${action}d successfully!`, 'success');
         }
       } catch (err: any) {
         showToast(err.response?.data?.message || `Failed to ${action} location`, 'error');
-        console.error(`Error ${action}ing store:`, err);
+        console.error(`Error ${action}ing location:`, err);
       }
     }
   };
 
-  const filteredStores = stores
-    .filter((store) => filterType === 'all' || store.location_type === filterType)
+  const filteredLocations = locations
+    .filter((location) => filterType === 'all' || location.location_type === filterType)
     .sort((a, b) => {
     let compareValue = 0;
     
@@ -161,11 +161,11 @@ const StoreManagementPage = () => {
     return sortOrder === 'asc' ? compareValue : -compareValue;
   });
 
-  const totalStores = stores.length;
-  const activeStores = stores.filter(s => s.is_active).length;
-  const inactiveStores = stores.filter(s => !s.is_active).length;
+  const totalLocations = locations.length;
+  const activeLocations = locations.filter(s => s.is_active).length;
+  const inactiveLocations = locations.filter(s => !s.is_active).length;
 
-  if (loading && stores.length === 0) {
+  if (loading && locations.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -198,15 +198,15 @@ const StoreManagementPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-500">Total Locations</p>
-          <p className="text-2xl font-semibold text-gray-900 mt-2">{totalStores}</p>
+          <p className="text-2xl font-semibold text-gray-900 mt-2">{totalLocations}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-500">Active Locations</p>
-          <p className="text-2xl font-semibold text-green-600 mt-2">{activeStores}</p>
+          <p className="text-2xl font-semibold text-green-600 mt-2">{activeLocations}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-sm font-medium text-gray-500">Inactive Locations</p>
-          <p className="text-2xl font-semibold text-red-600 mt-2">{inactiveStores}</p>
+          <p className="text-2xl font-semibold text-red-600 mt-2">{inactiveLocations}</p>
         </div>
       </div>
 
@@ -289,44 +289,44 @@ const StoreManagementPage = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredStores.length === 0 ? (
+            {filteredLocations.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   No locations found
                 </td>
               </tr>
             ) : (
-              filteredStores.map((store) => (
-                <tr key={store.location_id} className="hover:bg-gray-50">
+              filteredLocations.map((location) => (
+                <tr key={location.location_id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {store.location_id}
+                    {location.location_id}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
-                    {store.location_code}
+                    {location.location_code}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {store.location_name}
+                    {location.location_name}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {store.location_address}
+                    {location.location_address}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {store.location_type}
+                    {location.location_type}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        store.is_active
+                        location.is_active
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {store.is_active ? 'Active' : 'Inactive'}
+                      {location.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <button
-                      onClick={() => handleEdit(store)}
+                      onClick={() => handleEdit(location)}
                       className="text-blue-600 hover:text-blue-900 p-1"
                       title="Edit"
                     >
@@ -335,15 +335,15 @@ const StoreManagementPage = () => {
                       </svg>
                     </button>
                     <button
-                      onClick={() => handleToggleStatus(store)}
+                      onClick={() => handleToggleStatus(location)}
                       className={`p-1 ${
-                        store.is_active
+                        location.is_active
                           ? 'text-red-600 hover:text-red-900'
                           : 'text-green-600 hover:text-green-900'
                       }`}
-                      title={store.is_active ? 'Deactivate' : 'Activate'}
+                      title={location.is_active ? 'Deactivate' : 'Activate'}
                     >
-                      {store.is_active ? (
+                      {location.is_active ? (
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
                         </svg>
@@ -373,7 +373,7 @@ const StoreManagementPage = () => {
             style={{ boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.3)' }}
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              {editingStore ? 'Edit Location' : 'Create New Location'}
+              {editingLocation ? 'Edit Location' : 'Create New Location'}
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -387,18 +387,18 @@ const StoreManagementPage = () => {
                   value={formData.location_code}
                   onChange={(e) => setFormData({ ...formData, location_code: e.target.value.toUpperCase() })}
                   required
-                  disabled={!!editingStore}
-                  readOnly={!!editingStore}
+                  disabled={!!editingLocation}
+                  readOnly={!!editingLocation}
                   pattern="[A-Z][A-Z0-9_-]{2,31}"
                   title="3-32 chars and only A-Z, 0-9, _, -"
                   className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-                  style={editingStore ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+                  style={editingLocation ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
                   placeholder="CKP_HCM_001"
                 />
-                {editingStore && (
+                {editingLocation && (
                   <p className="text-xs text-gray-500 mt-1">⚠️ Location code cannot be modified after creation</p>
                 )}
-                {!editingStore && (
+                {!editingLocation && (
                   <p className="text-xs text-gray-500 mt-1">Example: CKP_HCM_001, CKW_HCM_001, STO_HCM_001</p>
                 )}
               </div>
@@ -462,7 +462,7 @@ const StoreManagementPage = () => {
                   type="submit"
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
                 >
-                  {editingStore ? 'Update Location' : 'Create Location'}
+                  {editingLocation ? 'Update Location' : 'Create Location'}
                 </button>
                 <button
                   type="button"
@@ -480,4 +480,4 @@ const StoreManagementPage = () => {
   );
 };
 
-export default StoreManagementPage;
+export default LocationManagementPage;

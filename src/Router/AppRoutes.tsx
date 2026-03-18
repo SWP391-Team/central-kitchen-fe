@@ -5,10 +5,11 @@ import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import ProductManagement from '@/pages/Inventory/ProductManagement'
 import ProductionPlanPage from '@/pages/ProductionPlan/ProductionPlanPage'
 import ProductionBatchPage from '@/pages/ProductionBatch/ProductionBatchPage'
+import BatchTransferPage from '@/pages/BatchTransfer/BatchTransferPage'
 import QualityInspectionPage from '@/pages/QualityInspection/QualityInspectionPage'
 import ReworkBatchPage from '@/pages/ReworkBatch/ReworkBatchPage'
 import UserManagementPage from '@/pages/UserPage/UserManagementPage'
-import StoreManagementPage from '@/pages/StoreManagement/StoreManagementPage'
+import LocationManagementPage from '@/pages/LocationManagement/LocationManagementPage'
 import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
 import WarehouseReceivePage from '@/pages/WarehouseReceive/WarehouseReceivePage'
 import InventoryPage from '@/pages/InventoryPage/InventoryPage'
@@ -62,6 +63,12 @@ const AppRouter = () => {
           element={<ProtectedRoute allowedRoles={[1, 2]}><ProductionBatchPage /></ProtectedRoute>} 
         />
         
+        {/* Batch Transfer - Admin, Central_Staff */}
+        <Route 
+          path="/batch-transfer" 
+          element={<ProtectedRoute allowedRoles={[1, 2]}><BatchTransferPage /></ProtectedRoute>} 
+        />
+        
         {/* Quality Inspection - Admin, Central_Staff */}
         <Route 
           path="/quality-inspection" 
@@ -92,10 +99,16 @@ const AppRouter = () => {
           element={<ProtectedRoute allowedRoles={[1]}><UserManagementPage /></ProtectedRoute>} 
         />
         
-        {/* Store Management - Admin only */}
+        {/* Location Management - Admin only */}
+        <Route 
+          path="/locations" 
+          element={<ProtectedRoute allowedRoles={[1]}><LocationManagementPage /></ProtectedRoute>} 
+        />
+
+        {/* Backward-compatible alias */}
         <Route 
           path="/stores" 
-          element={<ProtectedRoute allowedRoles={[1]}><StoreManagementPage /></ProtectedRoute>} 
+          element={<Navigate to="/locations" replace />} 
         />
         
         {/* Audit Log - Admin only */}
