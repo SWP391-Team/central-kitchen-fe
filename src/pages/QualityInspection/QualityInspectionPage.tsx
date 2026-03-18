@@ -11,10 +11,13 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { MagnifyingGlassIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/outline';
+import PaginationControls from '@/components/PaginationControls';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const QualityInspectionPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   
   const [activeTab, setActiveTab] = useState<'batches' | 'inspections'>('batches');
   
@@ -24,6 +27,8 @@ const QualityInspectionPage = () => {
   const [batchStatusFilter, setBatchStatusFilter] = useState('all');
   const [batchSortBy, setBatchSortBy] = useState<'created_at' | 'production_date'>('created_at');
   const [batchSortOrder, setBatchSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [batchCurrentPage, setBatchCurrentPage] = useState(1);
+  const batchPageSize = 10;
   
   const [inspections, setInspections] = useState<QualityInspectionWithDetails[]>([]);
   const [inspectionsLoading, setInspectionsLoading] = useState(false);
@@ -59,6 +64,18 @@ const QualityInspectionPage = () => {
       loadInspections();
     }
   }, [activeTab, batchSearch, batchStatusFilter, batchSortBy, batchSortOrder, inspectionSearch, inspectionStatusFilter, inspectionSortBy, inspectionSortOrder, currentPage]);
+
+  useEffect(() => {
+    if (activeTab === 'batches') {
+      setBatchCurrentPage(1);
+    }
+  }, [activeTab, batchSearch, batchStatusFilter, batchSortBy, batchSortOrder]);
+
+  useEffect(() => {
+    if (activeTab === 'inspections') {
+      setCurrentPage(1);
+    }
+  }, [activeTab, inspectionSortBy, inspectionSortOrder]);
 
   const loadBatches = async () => {
     try {
@@ -253,80 +270,106 @@ const QualityInspectionPage = () => {
   };
 
   const handleStartInspection = async (batch: ProductionBatchWithDetails) => {
-    if (window.confirm(`Start quality inspection for batch ${batch.batch_code}?`)) {
-      try {
-        await qualityInspectionService.startInspection({ batch_id: batch.batch_id });
-        showToast('Inspection started successfully!', 'success');
-        loadBatches();
-        setActiveTab('inspections');
-        loadInspections();
-      } catch (error: any) {
-        console.error('Error starting inspection:', error);
-        showToast(error.response?.data?.message || 'Failed to start inspection', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Start Inspection',
+      message: `Start quality inspection for batch ${batch.batch_code}?`,
+      confirmText: 'Start',
+    });
+    if (!accepted) return;
+
+    try {
+      await qualityInspectionService.startInspection({ batch_id: batch.batch_id });
+      showToast('Inspection started successfully!', 'success');
+      loadBatches();
+      setActiveTab('inspections');
+      loadInspections();
+    } catch (error: any) {
+      console.error('Error starting inspection:', error);
+      showToast(error.response?.data?.message || 'Failed to start inspection', 'error');
     }
   };
 
   const handleReinspection = async (inspection: QualityInspectionWithDetails) => {
-    if (window.confirm(`Start reinspection for batch ${inspection.batch_code}?`)) {
-      try {
-        await qualityInspectionService.reinspection({ batch_id: inspection.batch_id });
-        showToast('Reinspection started successfully!', 'success');
-        loadInspections();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error starting reinspection:', error);
-        showToast(error.response?.data?.message || 'Failed to start reinspection', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Start Reinspection',
+      message: `Start reinspection for batch ${inspection.batch_code}?`,
+      confirmText: 'Start',
+    });
+    if (!accepted) return;
+
+    try {
+      await qualityInspectionService.reinspection({ batch_id: inspection.batch_id });
+      showToast('Reinspection started successfully!', 'success');
+      loadInspections();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error starting reinspection:', error);
+      showToast(error.response?.data?.message || 'Failed to start reinspection', 'error');
     }
   };
 
   const handleRejectBatch = async (inspection: QualityInspectionWithDetails) => {
-    if (window.confirm(`Reject batch ${inspection.batch_code}? This action cannot be undone.`)) {
-      try {
-        await qualityInspectionService.rejectBatch(inspection.batch_id);
-        showToast('Batch rejected successfully!', 'success');
-        loadInspections();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error rejecting batch:', error);
-        showToast(error.response?.data?.message || 'Failed to reject batch', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Reject Batch',
+      message: `Reject batch ${inspection.batch_code}? This action cannot be undone.`,
+      confirmText: 'Reject',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      await qualityInspectionService.rejectBatch(inspection.batch_id);
+      showToast('Batch rejected successfully!', 'success');
+      loadInspections();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error rejecting batch:', error);
+      showToast(error.response?.data?.message || 'Failed to reject batch', 'error');
     }
   };
 
   const handleSendReworkRequest = async (inspection: QualityInspectionWithDetails) => {
-    if (window.confirm(`Send rework request for batch ${inspection.batch_code}?`)) {
-      try {
-        await qualityInspectionService.sendReworkRequest(inspection.quality_inspection_id);
-        showToast('Rework request sent successfully!', 'success');
-        loadInspections();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error sending rework request:', error);
-        showToast(error.response?.data?.message || 'Failed to send rework request', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Send Rework Request',
+      message: `Send rework request for batch ${inspection.batch_code}?`,
+      confirmText: 'Send Request',
+    });
+    if (!accepted) return;
+
+    try {
+      await qualityInspectionService.sendReworkRequest(inspection.quality_inspection_id);
+      showToast('Rework request sent successfully!', 'success');
+      loadInspections();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error sending rework request:', error);
+      showToast(error.response?.data?.message || 'Failed to send rework request', 'error');
     }
   };
 
   const handleUndoInspection = async (inspection: QualityInspectionWithDetails) => {
-    if (window.confirm(
+    const accepted = await confirm({
+      title: 'Undo Inspection',
+      message:
       `Undo this inspection and create a new one?\n\n` +
       `Current status: ${inspection.status}\n` +
-      `This will mark current inspection as "Incorrect Data" and create a new inspection record.`
-    )) {
-      try {
-        const result = await qualityInspectionService.undoInspection(inspection.quality_inspection_id);
-        showToast(
-          `Inspection undone! New inspection ${result.newInspection.quality_inspection_code} created.`,
-          'success'
-        );
-        loadInspections();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error undoing inspection:', error);
-        showToast(error.response?.data?.message || 'Failed to undo inspection', 'error');
-      }
+      `This will mark current inspection as "Incorrect Data" and create a new inspection record.`,
+      confirmText: 'Undo Inspection',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      const result = await qualityInspectionService.undoInspection(inspection.quality_inspection_id);
+      showToast(
+        `Inspection undone! New inspection ${result.newInspection.quality_inspection_code} created.`,
+        'success'
+      );
+      loadInspections();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error undoing inspection:', error);
+      showToast(error.response?.data?.message || 'Failed to undo inspection', 'error');
     }
   };
 
@@ -510,6 +553,13 @@ const QualityInspectionPage = () => {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  const totalBatchPages = Math.max(1, Math.ceil(batches.length / batchPageSize));
+  const safeBatchCurrentPage = Math.min(batchCurrentPage, totalBatchPages);
+  const paginatedBatches = batches.slice(
+    (safeBatchCurrentPage - 1) * batchPageSize,
+    safeBatchCurrentPage * batchPageSize
+  );
+
   return (
     <div className="p-6">
       {/* Page Header */}
@@ -614,8 +664,9 @@ const QualityInspectionPage = () => {
               <p>No batches found</p>
             </div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
@@ -629,7 +680,7 @@ const QualityInspectionPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {batches.map((batch) => (
+                  {paginatedBatches.map((batch) => (
                     <tr key={batch.batch_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{batch.batch_code}</td>
                       <td className="px-4 py-3 text-sm">
@@ -669,8 +720,17 @@ const QualityInspectionPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeBatchCurrentPage}
+                totalPages={totalBatchPages}
+                totalItems={batches.length}
+                pageSize={batchPageSize}
+                onPageChange={setBatchCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -863,63 +923,13 @@ const QualityInspectionPage = () => {
                 </table>
               </div>
 
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                    {Math.min(currentPage * pageSize, total)} of {total} results
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCurrentPage(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <div className="flex items-center gap-2">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1)
-                        .filter((page) => {
-                          return (
-                            page === 1 ||
-                            page === totalPages ||
-                            (page >= currentPage - 1 && page <= currentPage + 1)
-                          );
-                        })
-                        .map((page, index, array) => {
-                          if (index > 0 && array[index - 1] !== page - 1) {
-                            return (
-                              <span key={`ellipsis-${page}`} className="px-2">
-                                ...
-                              </span>
-                            );
-                          }
-                          return (
-                            <button
-                              key={page}
-                              onClick={() => setCurrentPage(page)}
-                              className={`px-4 py-2 border rounded-lg ${
-                                currentPage === page
-                                  ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'border-gray-300 hover:bg-gray-50'
-                              }`}
-                            >
-                              {page}
-                            </button>
-                          );
-                        })}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={total}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+              />
             </>
           )}
         </>
@@ -1344,6 +1354,8 @@ const QualityInspectionPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

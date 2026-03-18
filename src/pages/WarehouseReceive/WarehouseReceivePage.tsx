@@ -5,10 +5,13 @@ import { BatchTransferWithDetails, WarehouseReceiveWithDetails } from '@/api/typ
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { XMarkIcon, InboxArrowDownIcon, EyeIcon } from '@heroicons/react/24/outline';
+import PaginationControls from '@/components/PaginationControls';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const WarehouseReceivePage = () => {
   const { isAdmin, isCentralStaff, isStoreStaff } = useAuth();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const [activeTab, setActiveTab] = useState<'batch-transfer' | 'warehouse-receive'>('batch-transfer');
 
@@ -22,6 +25,9 @@ const WarehouseReceivePage = () => {
   const [warehouseReceiveStatusFilter, setWarehouseReceiveStatusFilter] = useState<'all' | 'Received'>('all');
   const [warehouseReceiveSortBy, setWarehouseReceiveSortBy] = useState<'created_at' | 'received_date' | 'received_qty'>('created_at');
   const [warehouseReceiveSortOrder, setWarehouseReceiveSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [transfersCurrentPage, setTransfersCurrentPage] = useState(1);
+  const [receivesCurrentPage, setReceivesCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const [showReceiveDetailModal, setShowReceiveDetailModal] = useState(false);
   const [selectedWarehouseReceive, setSelectedWarehouseReceive] = useState<WarehouseReceiveWithDetails | null>(null);
@@ -50,6 +56,18 @@ const WarehouseReceivePage = () => {
 
     return () => clearTimeout(timer);
   }, [warehouseReceiveSearch]);
+
+  useEffect(() => {
+    if (activeTab === 'batch-transfer') {
+      setTransfersCurrentPage(1);
+    } else {
+      setReceivesCurrentPage(1);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setReceivesCurrentPage(1);
+  }, [warehouseReceiveSearchDebounce, warehouseReceiveStatusFilter, warehouseReceiveSortBy, warehouseReceiveSortOrder]);
 
   const loadDeliveringTransfers = async () => {
     try {
@@ -117,14 +135,17 @@ const WarehouseReceivePage = () => {
   };
 
   const handleCompleteReceive = async (transfer: BatchTransferWithDetails) => {
-    if (
-      !window.confirm(
+    const accepted = await confirm({
+      title: 'Complete Receive',
+      message:
         `Complete Receive for batch ${transfer.batch_code}?\n` +
         `This will mark the transfer as Received.\n` +
-        `Lost qty = ${transfer.transfer_qty - (transfer.already_received_qty ?? 0)}`
-      )
-    )
-      return;
+        `Lost qty = ${transfer.transfer_qty - (transfer.already_received_qty ?? 0)}`,
+      confirmText: 'Complete',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
     try {
       await batchTransferService.completeReceive(transfer.batch_transfer_id);
       showToast('Batch transfer completed successfully!', 'success');
@@ -218,6 +239,20 @@ const WarehouseReceivePage = () => {
       return warehouseReceiveSortOrder === 'asc' ? aValue - bValue : bValue - aValue;
     });
 
+  const totalTransferPages = Math.max(1, Math.ceil(deliveringTransfers.length / pageSize));
+  const safeTransfersCurrentPage = Math.min(transfersCurrentPage, totalTransferPages);
+  const paginatedTransfers = deliveringTransfers.slice(
+    (safeTransfersCurrentPage - 1) * pageSize,
+    safeTransfersCurrentPage * pageSize
+  );
+
+  const totalReceivePages = Math.max(1, Math.ceil(filteredWarehouseReceives.length / pageSize));
+  const safeReceivesCurrentPage = Math.min(receivesCurrentPage, totalReceivePages);
+  const paginatedWarehouseReceives = filteredWarehouseReceives.slice(
+    (safeReceivesCurrentPage - 1) * pageSize,
+    safeReceivesCurrentPage * pageSize
+  );
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -261,8 +296,9 @@ const WarehouseReceivePage = () => {
           ) : deliveringTransfers.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No delivering batch transfers found</div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transfer Code</th>
@@ -279,7 +315,7 @@ const WarehouseReceivePage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {deliveringTransfers.map((bt) => {
+                  {paginatedTransfers.map((bt) => {
                     const alreadyReceived = bt.already_received_qty ?? 0;
                     const remaining = bt.transfer_qty - alreadyReceived;
                     const canCompleteReceive =
@@ -334,8 +370,17 @@ const WarehouseReceivePage = () => {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeTransfersCurrentPage}
+                totalPages={totalTransferPages}
+                totalItems={deliveringTransfers.length}
+                pageSize={pageSize}
+                onPageChange={setTransfersCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -394,8 +439,9 @@ const WarehouseReceivePage = () => {
           ) : filteredWarehouseReceives.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No warehouse receive records found</div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
@@ -411,7 +457,7 @@ const WarehouseReceivePage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredWarehouseReceives.map((wr) => (
+                  {paginatedWarehouseReceives.map((wr) => (
                     <tr key={wr.warehouse_receive_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-mono font-semibold text-blue-700">{wr.warehouse_receive_code || '-'}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">
@@ -451,8 +497,17 @@ const WarehouseReceivePage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeReceivesCurrentPage}
+                totalPages={totalReceivePages}
+                totalItems={filteredWarehouseReceives.length}
+                pageSize={pageSize}
+                onPageChange={setReceivesCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -720,6 +775,8 @@ const WarehouseReceivePage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

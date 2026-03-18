@@ -12,6 +12,7 @@ import {
   WarehouseReceiveWithDetails,
 } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import PaginationControls from '@/components/PaginationControls';
 
 type BatchSortBy = 'updated_at' | 'qty_available' | 'qty_on_hand' | 'location_name';
 type AvailabilityFilter = 'all' | 'available' | 'out_of_stock' | 'reserved';
@@ -35,6 +36,7 @@ const InventoryPage = () => {
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
   const [batchSortBy, setBatchSortBy] = useState<BatchSortBy>('updated_at');
   const [batchSortOrder, setBatchSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [batchesCurrentPage, setBatchesCurrentPage] = useState(1);
 
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
@@ -45,6 +47,8 @@ const InventoryPage = () => {
     useState<TransactionReferenceFilter>('all');
   const [transactionSortBy, setTransactionSortBy] = useState<TransactionSortBy>('created_at');
   const [transactionSortOrder, setTransactionSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [transactionsCurrentPage, setTransactionsCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const [batchTransfers, setBatchTransfers] = useState<BatchTransferWithDetails[]>([]);
   const [productionBatches, setProductionBatches] = useState<ProductionBatchWithDetails[]>([]);
@@ -61,6 +65,29 @@ const InventoryPage = () => {
 
     loadTransactions();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'inventory-batches') {
+      setBatchesCurrentPage(1);
+    } else {
+      setTransactionsCurrentPage(1);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setBatchesCurrentPage(1);
+  }, [batchSearch, batchLocationFilter, availabilityFilter, batchSortBy, batchSortOrder]);
+
+  useEffect(() => {
+    setTransactionsCurrentPage(1);
+  }, [
+    transactionSearch,
+    transactionLocationFilter,
+    transactionTypeFilter,
+    referenceTypeFilter,
+    transactionSortBy,
+    transactionSortOrder,
+  ]);
 
   const loadBatchInventory = async () => {
     try {
@@ -290,6 +317,20 @@ const InventoryPage = () => {
       return transactionSortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     });
 
+  const totalBatchPages = Math.max(1, Math.ceil(filteredBatchInventory.length / pageSize));
+  const safeBatchesCurrentPage = Math.min(batchesCurrentPage, totalBatchPages);
+  const paginatedBatchInventory = filteredBatchInventory.slice(
+    (safeBatchesCurrentPage - 1) * pageSize,
+    safeBatchesCurrentPage * pageSize
+  );
+
+  const totalTransactionPages = Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
+  const safeTransactionsCurrentPage = Math.min(transactionsCurrentPage, totalTransactionPages);
+  const paginatedTransactions = filteredTransactions.slice(
+    (safeTransactionsCurrentPage - 1) * pageSize,
+    safeTransactionsCurrentPage * pageSize
+  );
+
   const selectedBatchTransfer =
     selectedTransaction?.reference_type === 'batch_transfer'
       ? batchTransferMap.get(selectedTransaction.reference_id) || null
@@ -398,8 +439,9 @@ const InventoryPage = () => {
           ) : filteredBatchInventory.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No inventory records found</div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
@@ -412,7 +454,7 @@ const InventoryPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBatchInventory.map((bi) => (
+                  {paginatedBatchInventory.map((bi) => (
                     <tr key={bi.batch_inventory_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-blue-700">
                         {bi.location_name || bi.location_id}
@@ -433,8 +475,17 @@ const InventoryPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeBatchesCurrentPage}
+                totalPages={totalBatchPages}
+                totalItems={filteredBatchInventory.length}
+                pageSize={pageSize}
+                onPageChange={setBatchesCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -514,8 +565,9 @@ const InventoryPage = () => {
           ) : filteredTransactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No transaction records found</div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
@@ -529,7 +581,7 @@ const InventoryPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTransactions.map((tx) => {
+                  {paginatedTransactions.map((tx) => {
                     const relatedTransfer =
                       tx.reference_type === 'batch_transfer'
                         ? batchTransferMap.get(tx.reference_id)
@@ -586,8 +638,17 @@ const InventoryPage = () => {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeTransactionsCurrentPage}
+                totalPages={totalTransactionPages}
+                totalItems={filteredTransactions.length}
+                pageSize={pageSize}
+                onPageChange={setTransactionsCurrentPage}
+              />
+            </>
           )}
         </>
       )}

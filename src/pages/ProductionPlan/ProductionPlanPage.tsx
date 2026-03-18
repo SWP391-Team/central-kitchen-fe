@@ -4,6 +4,7 @@ import { productionBatchService } from '@/api/services/productionBatchService';
 import { productService } from '@/api/services/productService';
 import { ProductionPlanWithProduct, ProductionPlanCreateRequest, Product, ProductionBatchWithDetails } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { MagnifyingGlassIcon, PlusIcon, XCircleIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const ProductionPlanPage = () => {
@@ -34,6 +35,7 @@ const ProductionPlanPage = () => {
   const [loadingBatches, setLoadingBatches] = useState(false);
 
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   // Debounce search term
   useEffect(() => {
@@ -147,41 +149,58 @@ const ProductionPlanPage = () => {
   };
 
   const handleCancel = async (planId: number, planCode: string) => {
-    if (window.confirm(`Are you sure you want to cancel production plan ${planCode}?`)) {
-      try {
-        await productionPlanService.cancelProductionPlan(planId);
-        showToast('Production plan cancelled successfully', 'success');
-        loadProductionPlans();
-      } catch (error: any) {
-        console.error('Error cancelling production plan:', error);
-        showToast(error.response?.data?.message || 'Failed to cancel production plan', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Cancel Production Plan',
+      message: `Are you sure you want to cancel production plan ${planCode}?`,
+      confirmText: 'Cancel Plan',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionPlanService.cancelProductionPlan(planId);
+      showToast('Production plan cancelled successfully', 'success');
+      loadProductionPlans();
+    } catch (error: any) {
+      console.error('Error cancelling production plan:', error);
+      showToast(error.response?.data?.message || 'Failed to cancel production plan', 'error');
     }
   };
 
   const handleClose = async (planId: number, planCode: string) => {
-    if (window.confirm(`Are you sure you want to close production plan ${planCode}? This action cannot be undone.`)) {
-      try {
-        await productionPlanService.closeProductionPlan(planId);
-        showToast('Production plan closed successfully', 'success');
-        loadProductionPlans();
-      } catch (error: any) {
-        console.error('Error closing production plan:', error);
-        showToast(error.response?.data?.message || 'Failed to close production plan', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Close Production Plan',
+      message: `Are you sure you want to close production plan ${planCode}? This action cannot be undone.`,
+      confirmText: 'Close Plan',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionPlanService.closeProductionPlan(planId);
+      showToast('Production plan closed successfully', 'success');
+      loadProductionPlans();
+    } catch (error: any) {
+      console.error('Error closing production plan:', error);
+      showToast(error.response?.data?.message || 'Failed to close production plan', 'error');
     }
   };
 
   const handleRelease = async (planId: number, planCode: string) => {
-    if (window.confirm(`Are you sure you want to release production plan ${planCode}?`)) {
-      try {
-        await productionPlanService.releasePlan(planId);
-        showToast('Production plan released successfully', 'success');
-        loadProductionPlans();
-      } catch (error: any) {
-        console.error('Error releasing production plan:', error);
-        showToast(error.response?.data?.message || 'Failed to release production plan', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Release Production Plan',
+      message: `Are you sure you want to release production plan ${planCode}?`,
+      confirmText: 'Release Plan',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionPlanService.releasePlan(planId);
+      showToast('Production plan released successfully', 'success');
+      loadProductionPlans();
+    } catch (error: any) {
+      console.error('Error releasing production plan:', error);
+      showToast(error.response?.data?.message || 'Failed to release production plan', 'error');
     }
   };
 
@@ -259,16 +278,8 @@ const ProductionPlanPage = () => {
 
       {/* Action Bar */}
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          <PlusIcon className="h-5 w-5" />
-          Create Production Plan
-        </button>
-
         {/* Search */}
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full sm:max-w-sm">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
           </div>
@@ -280,6 +291,14 @@ const ProductionPlanPage = () => {
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
+
+        <button
+          onClick={openCreateModal}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors sm:ml-auto"
+        >
+          <PlusIcon className="h-5 w-5" />
+          Create Production Plan
+        </button>
       </div>
 
       {/* Filters and Sort */}
@@ -740,6 +759,8 @@ const ProductionPlanPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

@@ -10,10 +10,13 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { PlusIcon, XMarkIcon, MagnifyingGlassIcon, EyeIcon } from '@heroicons/react/24/outline';
+import PaginationControls from '@/components/PaginationControls';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const ReworkBatchPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const [activeTab, setActiveTab] = useState<'batches' | 'reworks'>('batches');
 
@@ -37,6 +40,9 @@ const ReworkBatchPage = () => {
   const [detailRework, setDetailRework] = useState<ReworkRecordWithDetails | null>(null);
 
   const [search, setSearch] = useState('');
+  const [batchesCurrentPage, setBatchesCurrentPage] = useState(1);
+  const [reworksCurrentPage, setReworksCurrentPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     if (activeTab === 'batches') {
@@ -45,6 +51,14 @@ const ReworkBatchPage = () => {
       loadReworks();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'batches') {
+      setBatchesCurrentPage(1);
+    } else {
+      setReworksCurrentPage(1);
+    }
+  }, [activeTab, search]);
 
   const loadBatches = async () => {
     try {
@@ -194,37 +208,47 @@ const ReworkBatchPage = () => {
   };
 
   const handleSendToQC = async (rework: ReworkRecordWithDetails) => {
-    if (window.confirm(`Send batch ${rework.batch_code} to Quality Control?`)) {
-      try {
-        await reworkRecordService.sendToQC(rework.batch_id);
-        showToast('Batch sent to QC successfully!', 'success');
-        loadReworks();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error sending to QC:', error);
-        showToast(error.response?.data?.message || 'Failed to send to QC', 'error');
-      }
+    const accepted = await confirm({
+      title: 'Send To QC',
+      message: `Send batch ${rework.batch_code} to Quality Control?`,
+      confirmText: 'Send To QC',
+    });
+    if (!accepted) return;
+
+    try {
+      await reworkRecordService.sendToQC(rework.batch_id);
+      showToast('Batch sent to QC successfully!', 'success');
+      loadReworks();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error sending to QC:', error);
+      showToast(error.response?.data?.message || 'Failed to send to QC', 'error');
     }
   };
 
   const handleUndoFinishRework = async (rework: ReworkRecordWithDetails) => {
-    if (window.confirm(
+    const accepted = await confirm({
+      title: 'Undo Rework',
+      message:
       `Undo this rework and create a new one?\n\n` +
       `Current status: ${rework.status}\n` +
-      `This will mark current rework as "Incorrect Data" and create a new rework record.`
-    )) {
-      try {
-        const result = await reworkRecordService.undoFinishRework(rework.rework_id);
-        showToast(
-          result.message || `Rework undone! New rework ${result.data.newRework.rework_code} created.`,
-          'success'
-        );
-        loadReworks();
-        loadBatches();
-      } catch (error: any) {
-        console.error('Error undoing rework:', error);
-        showToast(error.response?.data?.message || 'Failed to undo rework', 'error');
-      }
+      `This will mark current rework as "Incorrect Data" and create a new rework record.`,
+      confirmText: 'Undo Rework',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      const result = await reworkRecordService.undoFinishRework(rework.rework_id);
+      showToast(
+        result.message || `Rework undone! New rework ${result.data.newRework.rework_code} created.`,
+        'success'
+      );
+      loadReworks();
+      loadBatches();
+    } catch (error: any) {
+      console.error('Error undoing rework:', error);
+      showToast(error.response?.data?.message || 'Failed to undo rework', 'error');
     }
   };
 
@@ -279,6 +303,20 @@ const ReworkBatchPage = () => {
       rework.product_name?.toLowerCase().includes(searchLower)
     );
   });
+
+  const totalBatchPages = Math.max(1, Math.ceil(filteredBatches.length / pageSize));
+  const safeBatchesCurrentPage = Math.min(batchesCurrentPage, totalBatchPages);
+  const paginatedBatches = filteredBatches.slice(
+    (safeBatchesCurrentPage - 1) * pageSize,
+    safeBatchesCurrentPage * pageSize
+  );
+
+  const totalReworkPages = Math.max(1, Math.ceil(filteredReworks.length / pageSize));
+  const safeReworksCurrentPage = Math.min(reworksCurrentPage, totalReworkPages);
+  const paginatedReworks = filteredReworks.slice(
+    (safeReworksCurrentPage - 1) * pageSize,
+    safeReworksCurrentPage * pageSize
+  );
 
   return (
     <div className="p-6">
@@ -340,8 +378,9 @@ const ReworkBatchPage = () => {
               <p>No batches found</p>
             </div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
@@ -352,7 +391,7 @@ const ReworkBatchPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredBatches.map((batch) => (
+                  {paginatedBatches.map((batch) => (
                     <tr key={batch.batch_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{batch.batch_code}</td>
                       <td className="px-4 py-3 text-sm">
@@ -376,8 +415,17 @@ const ReworkBatchPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeBatchesCurrentPage}
+                totalPages={totalBatchPages}
+                totalItems={filteredBatches.length}
+                pageSize={pageSize}
+                onPageChange={setBatchesCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -395,8 +443,9 @@ const ReworkBatchPage = () => {
               <p>No rework records found</p>
             </div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rework Code</th>
@@ -412,7 +461,7 @@ const ReworkBatchPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredReworks.map((rework) => (
+                  {paginatedReworks.map((rework) => (
                     <tr key={rework.rework_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-semibold text-blue-700">{rework.rework_code}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{rework.batch_code}</td>
@@ -477,8 +526,17 @@ const ReworkBatchPage = () => {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeReworksCurrentPage}
+                totalPages={totalReworkPages}
+                totalItems={filteredReworks.length}
+                pageSize={pageSize}
+                onPageChange={setReworksCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -764,6 +822,8 @@ const ReworkBatchPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

@@ -10,6 +10,7 @@ import {
   XMarkIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline';
+import PaginationControls from '@/components/PaginationControls';
 
 const BatchTransferPage = () => {
   const { showToast } = useToast();
@@ -21,6 +22,8 @@ const BatchTransferPage = () => {
   const [transferStatusFilter, setTransferStatusFilter] = useState<string>('all');
   const [transferSortBy, setTransferSortBy] = useState<'created_at' | 'transfer_date' | 'transfer_qty'>('created_at');
   const [transferSortOrder, setTransferSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   
   const [showTransferDetailModal, setShowTransferDetailModal] = useState(false);
   const [selectedTransferForDetail, setSelectedTransferForDetail] = useState<BatchTransferWithDetails | null>(null);
@@ -37,6 +40,10 @@ const BatchTransferPage = () => {
 
   useEffect(() => {
     loadBatchTransfers();
+  }, [searchDebounce, transferStatusFilter, transferSortBy, transferSortOrder]);
+
+  useEffect(() => {
+    setCurrentPage(1);
   }, [searchDebounce, transferStatusFilter, transferSortBy, transferSortOrder]);
 
   const loadBatchTransfers = async () => {
@@ -111,6 +118,13 @@ const BatchTransferPage = () => {
       return transferSortOrder === 'asc' ? aValue - bValue : bValue - aValue;
     });
 
+  const totalPages = Math.max(1, Math.ceil(filteredBatchTransfers.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedBatchTransfers = filteredBatchTransfers.slice(
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
+  );
+
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -165,8 +179,9 @@ const BatchTransferPage = () => {
         ) : filteredBatchTransfers.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No batch transfers found</div>
         ) : (
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+          <>
+            <div className="bg-white shadow-md rounded-lg overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transfer Code</th>
@@ -184,7 +199,7 @@ const BatchTransferPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredBatchTransfers.map((bt) => (
+                {paginatedBatchTransfers.map((bt) => (
                   <tr key={bt.batch_transfer_id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-mono font-semibold text-blue-700">{bt.batch_transfer_code || '-'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-purple-700">{bt.batch_code || bt.batch_id}</td>
@@ -222,8 +237,17 @@ const BatchTransferPage = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+
+            <PaginationControls
+              currentPage={safeCurrentPage}
+              totalPages={totalPages}
+              totalItems={filteredBatchTransfers.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+            />
+          </>
         )}
       </>
 

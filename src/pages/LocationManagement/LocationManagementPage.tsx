@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { locationService } from '@/api/services/locationService';
 import { Location, LocationCreateRequest, LocationUpdateRequest } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const LocationManagementPage = () => {
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -127,17 +129,24 @@ const LocationManagementPage = () => {
       ? `Are you sure you want to deactivate "${location.location_name}"? Users assigned to this location will be blocked from login.`
       : `Are you sure you want to activate "${location.location_name}"?`;
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        const response = await locationService.toggleLocationStatus(location.location_id, !location.is_active);
-        if (response.success) {
-          fetchLocations();
-          showToast(`Location ${action}d successfully!`, 'success');
-        }
-      } catch (err: any) {
-        showToast(err.response?.data?.message || `Failed to ${action} location`, 'error');
-        console.error(`Error ${action}ing location:`, err);
+    const accepted = await confirm({
+      title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} Location`,
+      message: confirmMessage,
+      confirmText: action === 'deactivate' ? 'Deactivate' : 'Activate',
+      tone: action === 'deactivate' ? 'danger' : 'default',
+    });
+
+    if (!accepted) return;
+
+    try {
+      const response = await locationService.toggleLocationStatus(location.location_id, !location.is_active);
+      if (response.success) {
+        fetchLocations();
+        showToast(`Location ${action}d successfully!`, 'success');
       }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || `Failed to ${action} location`, 'error');
+      console.error(`Error ${action}ing location:`, err);
     }
   };
 
@@ -476,6 +485,8 @@ const LocationManagementPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

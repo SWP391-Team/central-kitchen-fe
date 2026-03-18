@@ -186,28 +186,28 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="flex h-screen w-72 flex-col border-r border-blue-200 bg-gradient-to-b from-blue-100 via-sky-50 to-blue-50 text-slate-700 shadow-sm">
+    <div className="flex h-screen w-72 flex-col border-r border-gray-200 bg-white text-gray-700 shadow-sm">
       {/* Header */}
-      <div className="h-16 border-b border-blue-200 px-5 flex items-center bg-blue-50/90 backdrop-blur-sm">
+      <div className="h-16 border-b border-gray-200 px-5 flex items-center bg-white">
         <div>
-          <h1 className="text-lg font-bold tracking-wide text-stone-900">CK Management</h1>
-          <p className="text-[11px] text-blue-900/70">Central Kitchen System</p>
+          <h1 className="text-lg font-bold tracking-wide text-gray-900">CK Management</h1>
+          <p className="text-[11px] text-gray-500">Central Kitchen System</p>
         </div>
       </div>
 
       {/* User Info */}
-      <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-4 shadow-sm">
+      <div className="mx-4 mt-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 shadow-sm">
         <div className="flex items-center space-x-3">
           <div className="flex-shrink-0">
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shadow-sm">
-              <span className="text-lg font-semibold">
+            <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center shadow-sm">
+              <span className="text-lg font-semibold text-white">
                 {user.username.charAt(0).toUpperCase()}
               </span>
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate text-stone-900">{user.username}</p>
-            <p className="text-xs text-blue-900/70 truncate">
+            <p className="text-sm font-semibold truncate text-gray-900">{user.username}</p>
+            <p className="text-xs text-gray-500 truncate">
               {getRoleName(user.role_id)}
             </p>
           </div>
@@ -217,12 +217,12 @@ const Sidebar = () => {
       {/* Navigation Menu */}
       <nav
         className="sidebar-scroll flex-1 overflow-y-auto px-3 py-4 space-y-5"
-        style={{ scrollbarWidth: 'thin', scrollbarColor: '#4f84c4 transparent' }}
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#9ca3af transparent' }}
       >
         {filteredSections.map((section) => (
           <div key={section.title || 'root'}>
             {section.title && (
-              <p className="px-3 mb-2 text-[11px] uppercase tracking-[0.14em] font-semibold text-blue-900/80">
+              <p className="px-3 mb-2 text-[11px] uppercase tracking-[0.14em] font-semibold text-gray-500">
                 {section.title}
               </p>
             )}
@@ -240,13 +240,13 @@ const Sidebar = () => {
                       to={item.path}
                       className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
                         isActive
-                          ? 'bg-blue-200/80 text-blue-950 ring-1 ring-blue-300 shadow-sm'
-                          : 'text-slate-700 hover:bg-blue-100/70 hover:text-slate-900'
+                          ? 'bg-gray-100 text-gray-900 ring-1 ring-gray-200 shadow-sm'
+                          : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                       }`}
                     >
                       <Icon
                         className={`h-5 w-5 shrink-0 ${
-                          isActive ? 'text-blue-800' : 'text-slate-500 group-hover:text-blue-800'
+                          isActive ? 'text-gray-800' : 'text-gray-400 group-hover:text-gray-700'
                         }`}
                       />
                       <span className="text-sm font-medium">{item.name}</span>
@@ -260,10 +260,10 @@ const Sidebar = () => {
       </nav>
 
       {/* Logout Button */}
-      <div className="p-4 border-t border-blue-200 bg-blue-50/70">
+      <div className="p-4 border-t border-gray-200 bg-white">
         <button
           onClick={handleLogout}
-          className="flex items-center space-x-3 w-full px-4 py-3 rounded-xl text-slate-700 hover:bg-blue-100/80 hover:text-blue-900 transition-colors"
+          className="flex items-center space-x-3 w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
         >
           <ArrowLeftOnRectangleIcon className="w-5 h-5" />
           <span className="text-sm font-medium">Logout</span>
@@ -281,14 +281,14 @@ const Sidebar = () => {
         }
 
         .sidebar-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, #7fb3e6 0%, #4f84c4 100%);
+          background: linear-gradient(180deg, #d1d5db 0%, #9ca3af 100%);
           border-radius: 9999px;
           border: 2px solid transparent;
           background-clip: padding-box;
         }
 
         .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, #5a9bd6 0%, #356fa8 100%);
+          background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
           border: 2px solid transparent;
           background-clip: padding-box;
         }

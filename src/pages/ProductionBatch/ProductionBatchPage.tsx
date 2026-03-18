@@ -17,10 +17,13 @@ import {
   XMarkIcon,
   TruckIcon,
 } from '@heroicons/react/24/outline';
+import PaginationControls from '@/components/PaginationControls';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const ProductionBatchPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [plans, setPlans] = useState<ProductionPlanWithProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [allBatches, setAllBatches] = useState<ProductionBatchWithDetails[]>([]);
@@ -58,6 +61,8 @@ const ProductionBatchPage = () => {
   const [batchStatusFilter, setBatchStatusFilter] = useState<string>('all');
   const [batchSortBy, setBatchSortBy] = useState<'created_at' | 'production_date'>('created_at');
   const [batchSortOrder, setBatchSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [batchesCurrentPage, setBatchesCurrentPage] = useState(1);
+  const batchesPageSize = 10;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -79,6 +84,12 @@ const ProductionBatchPage = () => {
       loadAllBatches();
     }
   }, [searchDebounce, statusFilter, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'batches') {
+      setBatchesCurrentPage(1);
+    }
+  }, [activeTab, searchDebounce, batchStatusFilter, batchSortBy, batchSortOrder]);
 
 
   const loadPlans = async () => {
@@ -338,62 +349,78 @@ const ProductionBatchPage = () => {
   };
 
   const handleCancelBatch = async (batch: ProductionBatchWithDetails) => {
-    if (window.confirm(`Are you sure you want to cancel batch ${batch.batch_code}? This action cannot be undone.`)) {
-      try {
-        await productionBatchService.cancelBatch(batch.batch_id);
-        
-        await loadPlans();
-        
-        if (activeTab === 'batches') {
-          await loadAllBatches();
-        }
-        
-        showToast('Batch cancelled successfully!', 'success');
-      } catch (err: any) {
-        const errorMessage = err.response?.data?.message || 'Failed to cancel batch';
-        setError(errorMessage);
-        showToast(errorMessage, 'error');
+    const accepted = await confirm({
+      title: 'Cancel Batch',
+      message: `Are you sure you want to cancel batch ${batch.batch_code}? This action cannot be undone.`,
+      confirmText: 'Cancel Batch',
+      tone: 'danger',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionBatchService.cancelBatch(batch.batch_id);
+
+      await loadPlans();
+
+      if (activeTab === 'batches') {
+        await loadAllBatches();
       }
+
+      showToast('Batch cancelled successfully!', 'success');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Failed to cancel batch';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     }
   };
 
   const handleSendToQC = async (batch: ProductionBatchWithDetails) => {
-    if (window.confirm(`Send batch ${batch.batch_code} to Quality Control?`)) {
-      try {
-        await productionBatchService.sendToQC(batch.batch_id);
-        
-        await loadPlans();
-        
-        if (activeTab === 'batches') {
-          await loadAllBatches();
-        }
-        
-        showToast('Batch sent to QC successfully!', 'success');
-      } catch (err: any) {
-        const errorMessage = err.response?.data?.message || 'Failed to send batch to QC';
-        setError(errorMessage);
-        showToast(errorMessage, 'error');
+    const accepted = await confirm({
+      title: 'Send To QC',
+      message: `Send batch ${batch.batch_code} to Quality Control?`,
+      confirmText: 'Send To QC',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionBatchService.sendToQC(batch.batch_id);
+
+      await loadPlans();
+
+      if (activeTab === 'batches') {
+        await loadAllBatches();
       }
+
+      showToast('Batch sent to QC successfully!', 'success');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Failed to send batch to QC';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     }
   };
 
   const handleUndoSendToQC = async (batch: ProductionBatchWithDetails) => {
-    if (window.confirm(`Undo send to QC for batch ${batch.batch_code}? This will revert the status back to Produced.`)) {
-      try {
-        await productionBatchService.undoSendToQC(batch.batch_id);
-        
-        await loadPlans();
-        
-        if (activeTab === 'batches') {
-          await loadAllBatches();
-        }
-        
-        showToast('Undo send to QC successfully! Batch status reverted to Produced.', 'success');
-      } catch (err: any) {
-        const errorMessage = err.response?.data?.message || 'Failed to undo send to QC';
-        setError(errorMessage);
-        showToast(errorMessage, 'error');
+    const accepted = await confirm({
+      title: 'Undo Send To QC',
+      message: `Undo send to QC for batch ${batch.batch_code}? This will revert the status back to Produced.`,
+      confirmText: 'Undo',
+    });
+    if (!accepted) return;
+
+    try {
+      await productionBatchService.undoSendToQC(batch.batch_id);
+
+      await loadPlans();
+
+      if (activeTab === 'batches') {
+        await loadAllBatches();
       }
+
+      showToast('Undo send to QC successfully! Batch status reverted to Produced.', 'success');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Failed to undo send to QC';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
     }
   };
 
@@ -483,6 +510,47 @@ const ProductionBatchPage = () => {
 
     return getHistoryTransitionNote(entry.old_status ?? null, entry.new_status);
   };
+
+  const filteredSortedBatches = allBatches
+    .filter((batch) => {
+      if (searchDebounce) {
+        const searchLower = searchDebounce.toLowerCase();
+        const planInfo = getPlanByIdFromBatch(batch.plan_id);
+        const matchesSearch =
+          batch.batch_code.toLowerCase().includes(searchLower) ||
+          batch.product_name?.toLowerCase().includes(searchLower) ||
+          planInfo?.plan_code.toLowerCase().includes(searchLower);
+
+        if (!matchesSearch) return false;
+      }
+
+      if (batchStatusFilter !== 'all' && batch.status !== batchStatusFilter) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      let aValue: number;
+      let bValue: number;
+
+      if (batchSortBy === 'created_at') {
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+      } else {
+        aValue = a.production_date ? new Date(a.production_date).getTime() : 0;
+        bValue = b.production_date ? new Date(b.production_date).getTime() : 0;
+      }
+
+      return batchSortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+    });
+
+  const totalBatchPages = Math.max(1, Math.ceil(filteredSortedBatches.length / batchesPageSize));
+  const safeBatchesCurrentPage = Math.min(batchesCurrentPage, totalBatchPages);
+  const paginatedBatches = filteredSortedBatches.slice(
+    (safeBatchesCurrentPage - 1) * batchesPageSize,
+    safeBatchesCurrentPage * batchesPageSize
+  );
 
   return (
     <div className="p-6">
@@ -653,66 +721,27 @@ const ProductionBatchPage = () => {
         <>
           {loading ? (
             <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : allBatches.length === 0 ? (
+          ) : filteredSortedBatches.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No production batches found</div>
           ) : (
-            <div className="bg-white shadow-md rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Good Qty</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Production Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expired Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {allBatches
-                    .filter(batch => {
-                      // Filter by search
-                      if (searchDebounce) {
-                        const searchLower = searchDebounce.toLowerCase();
-                        const planInfo = getPlanByIdFromBatch(batch.plan_id);
-                        const matchesSearch = (
-                          batch.batch_code.toLowerCase().includes(searchLower) ||
-                          batch.product_name?.toLowerCase().includes(searchLower) ||
-                          planInfo?.plan_code.toLowerCase().includes(searchLower)
-                        );
-                        if (!matchesSearch) return false;
-                      }
-                      
-                      // Filter by status
-                      if (batchStatusFilter !== 'all' && batch.status !== batchStatusFilter) {
-                        return false;
-                      }
-                      
-                      return true;
-                    })
-                    .sort((a, b) => {
-                      // Sort by selected field
-                      let aValue: any;
-                      let bValue: any;
-                      
-                      if (batchSortBy === 'created_at') {
-                        aValue = new Date(a.created_at).getTime();
-                        bValue = new Date(b.created_at).getTime();
-                      } else if (batchSortBy === 'production_date') {
-                        aValue = a.production_date ? new Date(a.production_date).getTime() : 0;
-                        bValue = b.production_date ? new Date(b.production_date).getTime() : 0;
-                      }
-                      
-                      if (batchSortOrder === 'asc') {
-                        return aValue - bValue;
-                      } else {
-                        return bValue - aValue;
-                      }
-                    })
-                    .map((batch) => {
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plan Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced Qty</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Good Qty</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Production Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expired Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedBatches.map((batch) => {
                       const planInfo = getPlanByIdFromBatch(batch.plan_id);
                       return (
                         <tr key={batch.batch_id} className="hover:bg-gray-50">
@@ -789,7 +818,7 @@ const ProductionBatchPage = () => {
                               {/* Delivery button: show when good_qty > 0 */}
                               {(isCentralStaff || isAdmin) &&
                                 (batch.good_qty ?? 0) > 0 &&
-                                !['cancelled', 'rejected', 'received'].includes(batch.status) && (
+                                !['cancelled', 'rejected', 'delivered', 'received'].includes(batch.status) && (
                                   <button
                                     onClick={() => handleOpenDeliveryModal(batch)}
                                     className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold flex items-center gap-1"
@@ -806,9 +835,18 @@ const ProductionBatchPage = () => {
                         </tr>
                       );
                     })}
-                </tbody>
-              </table>
-            </div>
+                  </tbody>
+                </table>
+              </div>
+
+              <PaginationControls
+                currentPage={safeBatchesCurrentPage}
+                totalPages={totalBatchPages}
+                totalItems={filteredSortedBatches.length}
+                pageSize={batchesPageSize}
+                onPageChange={setBatchesCurrentPage}
+              />
+            </>
           )}
         </>
       )}
@@ -1225,6 +1263,8 @@ const ProductionBatchPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

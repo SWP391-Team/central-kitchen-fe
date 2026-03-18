@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { productService } from '@/api/services/productService';
 import { Product, ProductCreateRequest, ProductUpdateRequest } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { PencilIcon, MagnifyingGlassIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 const ProductManagement = () => {
@@ -17,6 +18,7 @@ const ProductManagement = () => {
     shelf_life_days: 0,
   });
   const { showToast } = useToast();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const loadProducts = async () => {
     try {
@@ -123,9 +125,13 @@ const ProductManagement = () => {
 
   const handleToggleActive = async (product: Product) => {
     const action = product.is_active ? 'deactivate' : 'activate';
-    if (!window.confirm(`Are you sure you want to ${action} "${product.product_name}"?`)) {
-      return;
-    }
+    const accepted = await confirm({
+      title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} Product`,
+      message: `Are you sure you want to ${action} "${product.product_name}"?`,
+      confirmText: action === 'deactivate' ? 'Deactivate' : 'Activate',
+      tone: action === 'deactivate' ? 'danger' : 'default',
+    });
+    if (!accepted) return;
 
     try {
       await productService.toggleProductActive(product.product_id);
@@ -348,6 +354,8 @@ const ProductManagement = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { userService } from '@/api/services/userService';
 import { locationService } from '@/api/services/locationService';
 import { User, UserCreateRequest, UserUpdateRequest, Location } from '@/api/types';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 
 const UserManagementPage = () => {
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [users, setUsers] = useState<User[]>([]);
   const [stores, setStores] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,7 +170,13 @@ const UserManagementPage = () => {
   };
 
   const handleDelete = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    const accepted = await confirm({
+      title: 'Delete User',
+      message: 'Are you sure you want to delete this user?',
+      confirmText: 'Delete',
+      tone: 'danger',
+    });
+    if (!accepted) return;
 
     try {
       await userService.deleteUser(userId);
@@ -180,7 +188,13 @@ const UserManagementPage = () => {
 
   const handleToggleStatus = async (user: User) => {
     const action = user.is_active ? 'deactivate' : 'activate';
-    if (!confirm(`Are you sure you want to ${action} user "${user.username}"?`)) return;
+    const accepted = await confirm({
+      title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} User`,
+      message: `Are you sure you want to ${action} user "${user.username}"?`,
+      confirmText: action === 'deactivate' ? 'Deactivate' : 'Activate',
+      tone: action === 'deactivate' ? 'danger' : 'default',
+    });
+    if (!accepted) return;
 
     try {
       await userService.updateUser(user.user_id, { is_active: !user.is_active });
@@ -627,6 +641,8 @@ const UserManagementPage = () => {
           </div>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 };
