@@ -5,6 +5,7 @@ export interface Location {
   location_address: string;
   location_type: 'CK_PRODUCTION' | 'CK_WAREHOUSE' | 'STORE';
   is_active: boolean;
+  created_by?: number | null;
   created_at: string;
   updated_at?: Date;
 }

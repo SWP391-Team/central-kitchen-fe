@@ -3,6 +3,7 @@ export type BatchTransferStatus = 'Delivering' | 'Received';
 export interface BatchTransfer {
   batch_transfer_id: number;
   batch_transfer_code?: string;
+  supply_order_item_id?: number | null;
   batch_id: number;
   product_id: number;
   from_location_id: number;
@@ -30,4 +31,5 @@ export interface BatchTransferCreateRequest {
   batch_id: number;
   transfer_qty: number;
   transfer_date: string;
+  supply_order_item_id?: number;
 }

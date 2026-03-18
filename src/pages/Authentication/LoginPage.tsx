@@ -32,11 +32,7 @@ const LoginPage = () => {
         created_at: new Date().toISOString(),
       });
 
-      if (response.user.role_id === 1) {
-        navigate('/users');
-      } else {
-        navigate('/');
-      }
+      navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
@@ -74,7 +70,7 @@ const LoginPage = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
           <div>
             <label htmlFor="username" className="block text-gray-700 font-semibold mb-2 flex items-center">
               <span className="mr-2">👤</span>
@@ -84,10 +80,12 @@ const LoginPage = () => {
               <input
                 type="text"
                 id="username"
+                name="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 pl-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
                 placeholder="Enter your username"
+                autoComplete="username"
                 required
                 disabled={loading}
               />
@@ -108,10 +106,15 @@ const LoginPage = () => {
               <input
                 type="password"
                 id="password"
+                name="password_no_suggest"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 pl-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
                 placeholder="Enter your password"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 required
                 disabled={loading}
               />

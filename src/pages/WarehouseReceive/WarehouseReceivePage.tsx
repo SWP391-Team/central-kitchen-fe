@@ -7,7 +7,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { XMarkIcon, InboxArrowDownIcon, EyeIcon } from '@heroicons/react/24/outline';
 
 const WarehouseReceivePage = () => {
-  const { isAdmin, isCentralStaff } = useAuth();
+  const { isAdmin, isCentralStaff, isStoreStaff } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'batch-transfer' | 'warehouse-receive'>('batch-transfer');
@@ -310,7 +310,7 @@ const WarehouseReceivePage = () => {
                         <td className="px-4 py-3 text-sm">{getTransferStatusBadge(bt.status)}</td>
                         <td className="px-4 py-3 text-sm">
                           <div className="flex gap-2">
-                            {(isAdmin || isCentralStaff) && remaining > 0 && (
+                            {(isAdmin || isCentralStaff || isStoreStaff) && remaining > 0 && (
                               <button
                                 onClick={() => handleOpenReceiveModal(bt)}
                                 className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold flex items-center gap-1"
@@ -320,7 +320,7 @@ const WarehouseReceivePage = () => {
                               </button>
                             )}
                             {/* Rule 8: Complete Receive */}
-                            {(isAdmin || isCentralStaff) && canCompleteReceive && alreadyReceived > 0 && (
+                            {(isAdmin || isCentralStaff || isStoreStaff) && canCompleteReceive && alreadyReceived > 0 && (
                               <button
                                 onClick={() => handleCompleteReceive(bt)}
                                 className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"
@@ -428,9 +428,16 @@ const WarehouseReceivePage = () => {
                       <td className="px-4 py-3 text-sm text-gray-700">{wr.created_by_username || wr.created_by}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{new Date(wr.created_at).toLocaleString()}</td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">
-                          {wr.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-700">
+                            {wr.status}
+                          </span>
+                          {wr.is_over_delivery && (
+                            <span className="px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                              Over Delivery
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <button

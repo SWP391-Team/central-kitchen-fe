@@ -1,5 +1,6 @@
 import api from '../axiosConfig';
 import { 
+  BatchStatusHistory,
   ProductionBatchCreateRequest,
   ProductionBatchFinishRequest, 
   ProduceBatchResponse,
@@ -49,6 +50,13 @@ export const productionBatchService = {
 
   getAllBatches: async (): Promise<ProductionBatchWithDetails[]> => {
     const response = await api.get<ApiResponse<ProductionBatchWithDetails[]>>('/production-batches/all');
+    return response.data.data;
+  },
+
+  getBatchStatusHistory: async (batchId: number): Promise<BatchStatusHistory[]> => {
+    const response = await api.get<ApiResponse<BatchStatusHistory[]>>(
+      `/production-batches/${batchId}/status-history`
+    );
     return response.data.data;
   },
 };

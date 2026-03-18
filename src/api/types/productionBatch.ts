@@ -46,3 +46,14 @@ export interface ProduceBatchResponse {
     created_by: number;
   };
 }
+
+export interface BatchStatusHistory {
+  batch_status_history_id: number;
+  batch_id: number;
+  old_status: string | null;
+  new_status: string;
+  changed_by: number | null;
+  changed_at: string;
+  note: string | null;
+  changed_by_username?: string;
+}

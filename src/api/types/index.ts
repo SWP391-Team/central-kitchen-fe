@@ -7,5 +7,7 @@ export * from './productionBatch';
 export * from './qualityInspection';
 export * from './reworkRecord';
 export * from './batchTransfer';
+export * from './supplyOrder';
 export * from './warehouseReceive';
 export * from './inventory';
+export * from './auditLog';

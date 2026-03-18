@@ -4,6 +4,8 @@ import { productionBatchService } from '@/api/services/productionBatchService';
 import { productService } from '@/api/services/productService';
 import { batchTransferService } from '@/api/services/batchTransferService';
 import {
+  BatchStatusHistory,
+  Product,
   ProductionPlanWithProduct,
   ProductionBatchWithDetails,
 } from '@/api/types';
@@ -20,6 +22,7 @@ const ProductionBatchPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
   const { showToast } = useToast();
   const [plans, setPlans] = useState<ProductionPlanWithProduct[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [allBatches, setAllBatches] = useState<ProductionBatchWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,9 +36,20 @@ const ProductionBatchPage = () => {
   const [deliveryMaxQty, setDeliveryMaxQty] = useState<number>(0);
   const [deliverySubmitting, setDeliverySubmitting] = useState(false);
 
+  const [showFinishModal, setShowFinishModal] = useState(false);
+  const [selectedBatchForFinish, setSelectedBatchForFinish] = useState<ProductionBatchWithDetails | null>(null);
+  const [finishProducedQty, setFinishProducedQty] = useState<number>(0);
+  const [finishProductionDate, setFinishProductionDate] = useState<string>('');
+  const [finishExpiredDate, setFinishExpiredDate] = useState<string>('');
+  const [isFinishExpiredDateManual, setIsFinishExpiredDateManual] = useState(false);
+  const [finishSubmitting, setFinishSubmitting] = useState(false);
+
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedBatchForDetail, setSelectedBatchForDetail] = useState<ProductionBatchWithDetails | null>(null);
   const [selectedPlanForDetail, setSelectedPlanForDetail] = useState<ProductionPlanWithProduct | null>(null);
+  const [detailTab, setDetailTab] = useState<'info' | 'history'>('info');
+  const [batchHistory, setBatchHistory] = useState<BatchStatusHistory[]>([]);
+  const [batchHistoryLoading, setBatchHistoryLoading] = useState(false);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -97,10 +111,23 @@ const ProductionBatchPage = () => {
 
   const loadProducts = async () => {
     try {
-      await productService.getActiveProducts();
+      const data = await productService.getActiveProducts();
+      setProducts(data);
     } catch (err: any) {
       console.error('Failed to load products:', err);
     }
+  };
+
+  const calculateExpiredDate = (productionDate: string, shelfLifeDays: number): string => {
+    if (!productionDate || !shelfLifeDays || shelfLifeDays <= 0) return '';
+    const date = new Date(`${productionDate}T00:00:00`);
+    date.setDate(date.getDate() + shelfLifeDays);
+    return date.toISOString().slice(0, 10);
+  };
+
+  const getShelfLifeDaysByBatch = (batch: ProductionBatchWithDetails): number => {
+    const product = products.find((item) => item.product_id === batch.product_id);
+    return product?.shelf_life_days || 0;
   };
 
   const loadAllBatches = async () => {
@@ -190,6 +217,81 @@ const ProductionBatchPage = () => {
       const errorMessage = err.response?.data?.message || 'Failed to create batch';
       setError(errorMessage);
       showToast(errorMessage, 'error');
+    }
+  };
+
+  const handleOpenFinishModal = (batch: ProductionBatchWithDetails) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const shelfLifeDays = getShelfLifeDaysByBatch(batch);
+    setSelectedBatchForFinish(batch);
+    setFinishProducedQty(batch.produced_qty || 0);
+    setFinishProductionDate(today);
+    setFinishExpiredDate(calculateExpiredDate(today, shelfLifeDays));
+    setIsFinishExpiredDateManual(false);
+    setShowFinishModal(true);
+  };
+
+  const handleChangeFinishProductionDate = (value: string) => {
+    setFinishProductionDate(value);
+
+    if (!selectedBatchForFinish) {
+      setFinishExpiredDate('');
+      return;
+    }
+
+    if (!isFinishExpiredDateManual) {
+      const shelfLifeDays = getShelfLifeDaysByBatch(selectedBatchForFinish);
+      setFinishExpiredDate(calculateExpiredDate(value, shelfLifeDays));
+    }
+  };
+
+  const handleChangeFinishExpiredDate = (value: string) => {
+    setIsFinishExpiredDateManual(true);
+    setFinishExpiredDate(value);
+  };
+
+  const handleResetAutoExpiredDate = () => {
+    if (!selectedBatchForFinish) return;
+    const shelfLifeDays = getShelfLifeDaysByBatch(selectedBatchForFinish);
+    setIsFinishExpiredDateManual(false);
+    setFinishExpiredDate(calculateExpiredDate(finishProductionDate, shelfLifeDays));
+  };
+
+  const handleFinishSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBatchForFinish) return;
+
+    if (!finishProducedQty || finishProducedQty <= 0) {
+      showToast('Produced quantity must be greater than 0', 'error');
+      return;
+    }
+
+    if (!finishProductionDate || !finishExpiredDate) {
+      showToast('Production date and expired date are required', 'error');
+      return;
+    }
+
+    try {
+      setFinishSubmitting(true);
+      await productionBatchService.finishProduction(selectedBatchForFinish.batch_id, {
+        produced_qty: finishProducedQty,
+        production_date: finishProductionDate,
+        expired_date: finishExpiredDate,
+      });
+
+      showToast('Finish production successfully!', 'success');
+      setShowFinishModal(false);
+      setSelectedBatchForFinish(null);
+      await loadPlans();
+      if (activeTab === 'batches') {
+        await loadAllBatches();
+      }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Failed to finish production';
+      showToast(errorMessage, 'error');
+      setError(errorMessage);
+    } finally {
+      setFinishSubmitting(false);
     }
   };
 
@@ -299,9 +401,24 @@ const ProductionBatchPage = () => {
     return plans.find(p => p.plan_id === planId);
   };
 
+  const loadBatchHistory = async (batchId: number) => {
+    try {
+      setBatchHistoryLoading(true);
+      const data = await productionBatchService.getBatchStatusHistory(batchId);
+      setBatchHistory(data);
+    } catch {
+      setBatchHistory([]);
+      showToast('Failed to load batch history', 'error');
+    } finally {
+      setBatchHistoryLoading(false);
+    }
+  };
+
   const handleOpenDetailModal = (batch: ProductionBatchWithDetails) => {
     setSelectedBatchForDetail(batch);
     setSelectedPlanForDetail(getPlanByIdFromBatch(batch.plan_id) || null);
+    setDetailTab('info');
+    void loadBatchHistory(batch.batch_id);
     setShowDetailModal(true);
   };
 
@@ -309,6 +426,8 @@ const ProductionBatchPage = () => {
     setShowDetailModal(false);
     setSelectedBatchForDetail(null);
     setSelectedPlanForDetail(null);
+    setBatchHistory([]);
+    setDetailTab('info');
   };
 
   const formatDate = (dateString: string | null) => {
@@ -319,6 +438,50 @@ const ProductionBatchPage = () => {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const getHistoryTransitionNote = (oldStatus: string | null, newStatus: string): string => {
+    const transition = `${oldStatus ?? 'null'}->${newStatus}`;
+    const transitionNotes: Record<string, string> = {
+      'null->producing': 'Batch created',
+      'producing->produced': 'Production finished',
+      'producing->cancelled': 'Batch cancelled',
+      'produced->cancelled': 'Batch cancelled',
+      'produced->waiting_qc': 'Sent to QC',
+      'waiting_qc->produced': 'Undo send to QC',
+      'waiting_qc->under_qc': 'Inspection started',
+      'under_qc->rework_required': 'Rework requested',
+      'qc_failed->under_qc': 'Reinspection started',
+      'qc_passed->under_qc': 'Inspection undone',
+      'rework_required->under_qc': 'Inspection undone',
+      'rework_failed->under_qc': 'Inspection undone',
+      'under_qc->qc_passed': 'Inspection passed',
+      'under_qc->qc_failed': 'Inspection failed',
+      'qc_failed->rework_required': 'Rework requested',
+      'rework_required->reworking': 'Rework started',
+      'reworking->reworked': 'Rework completed',
+      'reworking->rework_failed': 'Rework failed',
+      'reworked->waiting_qc': 'Sent to QC after rework',
+      'waiting_qc->reworked': 'Undo rework from QC',
+      'reworked->reworking': 'Undo rework completion',
+      'rework_failed->reworking': 'Undo rework completion',
+      'produced->delivering': 'Delivery started',
+      'delivering->delivered': 'Delivery completed',
+      'delivering->received': 'All transfers received',
+      'delivered->received': 'All transfers received',
+      'qc_failed->rejected': 'Batch rejected',
+    };
+
+    return transitionNotes[transition] || `Status changed: ${oldStatus ?? '-'} -> ${newStatus}`;
+  };
+
+  const getHistoryNote = (entry: BatchStatusHistory): string => {
+    const trimmedNote = typeof entry.note === 'string' ? entry.note.trim() : '';
+    if (trimmedNote) {
+      return trimmedNote;
+    }
+
+    return getHistoryTransitionNote(entry.old_status ?? null, entry.new_status);
   };
 
   return (
@@ -591,9 +754,8 @@ const ProductionBatchPage = () => {
                                 <>
                                   {batch.status === 'producing' && (
                                     <button
-                                      disabled
-                                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold opacity-50 cursor-not-allowed"
-                                      title="Finish Production feature will be added soon"
+                                      onClick={() => handleOpenFinishModal(batch)}
+                                      className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
                                     >
                                       Finish Production
                                     </button>
@@ -652,6 +814,103 @@ const ProductionBatchPage = () => {
       )}
 
       {/* ── Delivery (Batch Transfer) Modal ── */}
+
+      {showFinishModal && selectedBatchForFinish && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Finish Production</h2>
+              <button
+                onClick={() => {
+                  setShowFinishModal(false);
+                  setSelectedBatchForFinish(null);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm space-y-1">
+              <p><span className="text-gray-500">Batch:</span> <span className="font-semibold text-purple-700">{selectedBatchForFinish.batch_code}</span></p>
+              <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{selectedBatchForFinish.product_name || '-'}</span></p>
+              <p><span className="text-gray-500">Shelf Life:</span> <span className="font-semibold text-indigo-700">{getShelfLifeDaysByBatch(selectedBatchForFinish) || '-'} days</span></p>
+            </div>
+
+            <form onSubmit={handleFinishSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produced Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={finishProducedQty || ''}
+                  onChange={(e) => setFinishProducedQty(parseInt(e.target.value || '0', 10))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Production Date</label>
+                <input
+                  type="date"
+                  value={finishProductionDate}
+                  onChange={(e) => handleChangeFinishProductionDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Expired Date</label>
+                <input
+                  type="date"
+                  value={finishExpiredDate}
+                  onChange={(e) => handleChangeFinishExpiredDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-xs text-gray-500">
+                    {isFinishExpiredDateManual
+                      ? 'Manual override enabled. Click Reset Auto to recalculate from shelf life.'
+                      : 'Auto-calculated from Production Date + Shelf Life (days).'}
+                  </p>
+                  {isFinishExpiredDateManual && (
+                    <button
+                      type="button"
+                      onClick={handleResetAutoExpiredDate}
+                      className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    >
+                      Reset Auto
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFinishModal(false);
+                    setSelectedBatchForFinish(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={finishSubmitting}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {finishSubmitting ? 'Processing...' : 'Finish Production'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ── Delivery (Batch Transfer) Modal ── */}
       {showDeliveryModal && selectedBatchForDelivery && (
@@ -769,106 +1028,188 @@ const ProductionBatchPage = () => {
 
       {showDetailModal && selectedBatchForDetail && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Production Batch Details</h2>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col border border-slate-200">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-slate-50 to-blue-50">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Production Batch Details</h2>
+                <p className="text-sm text-gray-600 mt-1">{selectedBatchForDetail.batch_code}</p>
+              </div>
               <button onClick={handleCloseDetailModal} className="text-gray-400 hover:text-gray-600">
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 px-6 py-4">
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Batch Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-sm text-gray-600">Batch Code:</span>
-                    <p className="font-semibold text-purple-700">{selectedBatchForDetail.batch_code}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <p>{getBatchStatusBadge(selectedBatchForDetail.status)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Product Name:</span>
-                    <p className="font-semibold">{selectedBatchForDetail.product_name || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Product Code:</span>
-                    <p className="font-semibold">{selectedBatchForDetail.product_code || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Produced Qty:</span>
-                    <p className="font-semibold">{selectedBatchForDetail.produced_qty || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Good Qty:</span>
-                    <p className="font-semibold text-green-600">{selectedBatchForDetail.good_qty || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Defect Qty:</span>
-                    <p className="font-semibold text-red-600">{selectedBatchForDetail.defect_qty || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Production Date:</span>
-                    <p className="font-semibold">{formatDate(selectedBatchForDetail.production_date)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Expired Date:</span>
-                    <p className="font-semibold">{formatDate(selectedBatchForDetail.expired_date)}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Created By:</span>
-                    <p className="font-semibold">{selectedBatchForDetail.created_by_username || '-'}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm text-gray-600">Created At:</span>
-                    <p className="font-semibold">{formatDate(selectedBatchForDetail.created_at)}</p>
-                  </div>
-                </div>
+            <div className="px-6 pt-4">
+              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200">
+                <button
+                  onClick={() => setDetailTab('info')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    detailTab === 'info'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  Info
+                </button>
+                <button
+                  onClick={() => setDetailTab('history')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                    detailTab === 'history'
+                      ? 'bg-white text-blue-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  History
+                </button>
               </div>
+            </div>
 
-              {selectedPlanForDetail && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">Production Plan Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-sm text-gray-600">Plan Code:</span>
-                      <p className="font-semibold text-blue-700">{selectedPlanForDetail.plan_code}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Plan Status:</span>
-                      <p>{getStatusBadge(selectedPlanForDetail.status)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Planned Qty:</span>
-                      <p className="font-semibold">{selectedPlanForDetail.planned_qty}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Actual Qty:</span>
-                      <p className="font-semibold">{selectedPlanForDetail.actual_qty || 0}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Variance Qty:</span>
-                      <p className={`font-semibold ${
-                        (selectedPlanForDetail.variance_qty || 0) < 0
-                          ? 'text-red-600'
-                          : (selectedPlanForDetail.variance_qty || 0) > 0
-                          ? 'text-green-600'
-                          : 'text-gray-600'
-                      }`}>
-                        {selectedPlanForDetail.variance_qty || 0}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Planned Date:</span>
-                      <p className="font-semibold">{formatDate(selectedPlanForDetail.planned_date)}</p>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600">Created At:</span>
-                      <p className="font-semibold">{formatDate(selectedPlanForDetail.created_at)}</p>
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {detailTab === 'info' && (
+                <>
+                  <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Batch Information</h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-sm text-gray-600">Batch Code:</span>
+                        <p className="font-semibold text-purple-700">{selectedBatchForDetail.batch_code}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Status:</span>
+                        <p>{getBatchStatusBadge(selectedBatchForDetail.status)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Product Name:</span>
+                        <p className="font-semibold">{selectedBatchForDetail.product_name || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Product Code:</span>
+                        <p className="font-semibold">{selectedBatchForDetail.product_code || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Produced Qty:</span>
+                        <p className="font-semibold">{selectedBatchForDetail.produced_qty || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Good Qty:</span>
+                        <p className="font-semibold text-green-600">{selectedBatchForDetail.good_qty || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Defect Qty:</span>
+                        <p className="font-semibold text-red-600">{selectedBatchForDetail.defect_qty || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Production Date:</span>
+                        <p className="font-semibold">{formatDate(selectedBatchForDetail.production_date)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Expired Date:</span>
+                        <p className="font-semibold">{formatDate(selectedBatchForDetail.expired_date)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Created By:</span>
+                        <p className="font-semibold">{selectedBatchForDetail.created_by_username || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Created At:</span>
+                        <p className="font-semibold">{formatDate(selectedBatchForDetail.created_at)}</p>
+                      </div>
                     </div>
                   </div>
+
+                  {selectedPlanForDetail && (
+                    <div className="rounded-xl border border-gray-200 bg-white p-5">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Production Plan Information</h3>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-sm text-gray-600">Plan Code:</span>
+                          <p className="font-semibold text-blue-700">{selectedPlanForDetail.plan_code}</p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Plan Status:</span>
+                          <p>{getStatusBadge(selectedPlanForDetail.status)}</p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Planned Qty:</span>
+                          <p className="font-semibold">{selectedPlanForDetail.planned_qty}</p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Actual Qty:</span>
+                          <p className="font-semibold">{selectedPlanForDetail.actual_qty || 0}</p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Variance Qty:</span>
+                          <p className={`font-semibold ${
+                            (selectedPlanForDetail.variance_qty || 0) < 0
+                              ? 'text-red-600'
+                              : (selectedPlanForDetail.variance_qty || 0) > 0
+                              ? 'text-green-600'
+                              : 'text-gray-600'
+                          }`}>
+                            {selectedPlanForDetail.variance_qty || 0}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Planned Date:</span>
+                          <p className="font-semibold">{formatDate(selectedPlanForDetail.planned_date)}</p>
+                        </div>
+                        <div>
+                          <span className="text-sm text-gray-600">Created At:</span>
+                          <p className="font-semibold">{formatDate(selectedPlanForDetail.created_at)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {detailTab === 'history' && (
+                <div className="rounded-xl border border-gray-200 bg-white p-5">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Batch Status Timeline</h3>
+
+                  {batchHistoryLoading ? (
+                    <div className="text-sm text-gray-500 py-8 text-center">Loading history...</div>
+                  ) : batchHistory.length === 0 ? (
+                    <div className="text-sm text-gray-500 py-8 text-center">
+                      No status history found for this batch.
+                    </div>
+                  ) : (
+                    <ol className="relative border-s border-slate-200 ms-3 space-y-6">
+                      {batchHistory.map((entry) => (
+                        <li key={entry.batch_status_history_id} className="ms-6">
+                          <span className="absolute -start-2.5 mt-1.5 h-4 w-4 rounded-full bg-blue-500 ring-4 ring-white" />
+
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {entry.old_status ? (
+                                  <>
+                                    <span className="text-slate-600">{entry.old_status}</span>
+                                    <span className="mx-2 text-slate-400">→</span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-500 me-2">Initial</span>
+                                )}
+                                <span className="text-blue-700">{entry.new_status}</span>
+                              </div>
+                              <span className="text-xs text-slate-500">
+                                {new Date(entry.changed_at).toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="mt-2 text-sm text-slate-600">
+                              Changed by: <span className="font-medium text-slate-800">{entry.changed_by_username || entry.changed_by || '-'}</span>
+                            </div>
+
+                            <div className="mt-2 text-sm text-slate-700 bg-white border border-slate-200 rounded p-2">
+                              <span className="font-medium text-slate-800">Note: </span>
+                              {getHistoryNote(entry)}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
               )}
             </div>

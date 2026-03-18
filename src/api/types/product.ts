@@ -5,6 +5,7 @@ export interface Product {
   unit: string;
   shelf_life_days: number;
   is_active: boolean;
+  created_by?: number | null;
   created_at?: string;
   updated_at?: string;
 }

@@ -6,6 +6,7 @@ export interface User {
   location_id: number | null;
   location_ids: number[];
   is_active: boolean;
+  created_by?: number | null;
   created_at: string;
   updated_at?: Date;
 }
