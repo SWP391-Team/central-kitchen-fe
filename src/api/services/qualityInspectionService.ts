@@ -1,5 +1,6 @@
 import api from '../axiosConfig';
 import { 
+  InspectedBySuggestion,
   QualityInspectionWithDetails,
   QualityInspectionStartRequest,
   QualityInspectionFinishRequest,
@@ -30,6 +31,13 @@ interface StartInspectionResponse {
 }
 
 class QualityInspectionService {
+  async searchInspectedBySuggestions(keyword: string): Promise<InspectedBySuggestion[]> {
+    const response = await api.get<ApiResponse<InspectedBySuggestion[]>>(
+      `/quality-inspections/inspected-by-suggestions?q=${encodeURIComponent(keyword)}`
+    );
+    return response.data.data;
+  }
+
   async startInspection(data: QualityInspectionStartRequest): Promise<StartInspectionResponse> {
     const response = await api.post<ApiResponse<StartInspectionResponse>>(
       '/quality-inspections/start',

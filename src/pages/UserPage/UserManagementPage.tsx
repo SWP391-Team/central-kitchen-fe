@@ -1,43 +1,68 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  EyeIcon,
+  MagnifyingGlassIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  PowerIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { userService } from '@/api/services/userService';
 import { locationService } from '@/api/services/locationService';
-import { User, UserCreateRequest, UserUpdateRequest, Location } from '@/api/types';
+import { Location, User, UserCreateRequest, UserUpdateRequest } from '@/api/types';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+
+type StatusFilter = 'all' | 'active' | 'inactive';
+
+type UserFormData = {
+  username: string;
+  password: string;
+  role_id: number;
+  location_id: number | null;
+  location_ids: number[];
+  is_active: boolean;
+};
+
+const INITIAL_FORM_DATA: UserFormData = {
+  username: '',
+  password: '',
+  role_id: 2,
+  location_id: null,
+  location_ids: [],
+  is_active: true,
+};
 
 const UserManagementPage = () => {
   const { confirm, confirmDialog } = useConfirmDialog();
+
   const [users, setUsers] = useState<User[]>([]);
   const [stores, setStores] = useState<Location[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [showModal, setShowModal] = useState(false);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [detailUser, setDetailUser] = useState<User | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const [formData, setFormData] = useState<UserFormData>(INITIAL_FORM_DATA);
+
+  const [searchInput, setSearchInput] = useState('');
+  const [searchDebounce, setSearchDebounce] = useState('');
   const [filterRole, setFilterRole] = useState<number | 'all'>('all');
-  const [filterStore, setFilterStore] = useState<number | 'all'>('all');
-  const [sortBy, setSortBy] = useState<'user_id' | 'username' | 'role_id' | 'location_id'>('user_id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [formData, setFormData] = useState<UserCreateRequest | UserUpdateRequest>({
-    user_code: '',
-    username: '',
-    password: '',
-    role_id: 2,
-    location_id: null,
-    location_ids: [],
-    is_active: true,
-  });
-
-  const getUserLocationIds = (user: User): number[] => {
-    if (Array.isArray(user.location_ids) && user.location_ids.length > 0) {
-      return user.location_ids;
-    }
-
-    return user.location_id ? [user.location_id] : [];
-  };
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>('all');
 
   useEffect(() => {
-    loadUsers();
-    loadStores();
+    const timer = setTimeout(() => setSearchDebounce(searchInput.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    void loadUsers();
+    void loadStores();
   }, []);
 
   const loadUsers = async () => {
@@ -59,57 +84,52 @@ const UserManagementPage = () => {
       if (response.success) {
         setStores(response.data);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load stores:', err);
     }
   };
 
-  const handleOpenModal = (user?: User) => {
-    if (user) {
-      setEditingUser(user);
-      setFormData({
-        user_code: user.user_code,
-        username: user.username,
-        password: '',
-        role_id: user.role_id,
-        location_id: user.location_id,
-        location_ids: getUserLocationIds(user),
-        is_active: user.is_active,
-      });
-    } else {
-      setEditingUser(null);
-      setFormData({
-        user_code: '',
-        username: '',
-        password: '',
-        role_id: 2,
-        location_id: null,
-        location_ids: [],
-        is_active: true,
-      });
-    }
-    setShowModal(true);
+  const getRoleName = (roleId: number) => {
+    const roleMap: Record<number, string> = {
+      1: 'Admin',
+      2: 'Central Staff',
+      3: 'Store Staff',
+    };
+    return roleMap[roleId] || 'Unknown';
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setEditingUser(null);
-    setFormData({
-      user_code: '',
-      username: '',
-      password: '',
-      role_id: 2,
-      location_id: null,
-      location_ids: [],
-      is_active: true,
-    });
+  const getRoleClassName = (roleId: number) => {
+    if (roleId === 1) return 'bg-rose-100 text-rose-700 border-rose-200';
+    if (roleId === 2) return 'bg-blue-100 text-blue-700 border-blue-200';
+    return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  };
+
+  const getUserLocationIds = (user: User): number[] => {
+    if (Array.isArray(user.location_ids) && user.location_ids.length > 0) {
+      return user.location_ids;
+    }
+    return user.location_id ? [user.location_id] : [];
+  };
+
+  const getStoreById = (locationId: number) => stores.find((store) => store.location_id === locationId);
+
+  const getStoreName = (locationId: number) => {
+    return getStoreById(locationId)?.location_name || `Location #${locationId}`;
+  };
+
+  const getStoreAddress = (locationId: number) => {
+    return getStoreById(locationId)?.location_address || '-';
+  };
+
+  const getStoreNames = (locationIds: number[]) => {
+    if (locationIds.length === 0) return '-';
+    return locationIds.map((locationId) => getStoreName(locationId)).join(', ');
   };
 
   const getSelectedLocationIdsFromForm = (): number[] => {
-    if (Array.isArray(formData.location_ids) && formData.location_ids.length > 0) {
+    if (formData.location_ids.length > 0) {
       return formData.location_ids;
     }
-
     return formData.location_id ? [formData.location_id] : [];
   };
 
@@ -119,11 +139,62 @@ const UserManagementPage = () => {
       ? selectedLocationIds.filter((id) => id !== locationId)
       : [...selectedLocationIds, locationId];
 
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       location_ids: nextLocationIds,
       location_id: nextLocationIds[0] ?? null,
+    }));
+  };
+
+  const openCreateModal = () => {
+    setEditingUser(null);
+    setError('');
+    setFormData(INITIAL_FORM_DATA);
+    setShowEditModal(true);
+  };
+
+  const openEditModal = (user: User) => {
+    setEditingUser(user);
+    setError('');
+
+    const locationIds = getUserLocationIds(user);
+    setFormData({
+      username: user.username,
+      password: '',
+      role_id: user.role_id,
+      location_id: locationIds[0] ?? null,
+      location_ids: locationIds,
+      is_active: user.is_active,
     });
+
+    setShowEditModal(true);
+  };
+
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingUser(null);
+    setFormData(INITIAL_FORM_DATA);
+  };
+
+  const openDetailModal = async (userId: number) => {
+    setShowDetailModal(true);
+    setDetailLoading(true);
+    setError('');
+
+    try {
+      const detail = await userService.getUserById(userId);
+      setDetailUser(detail);
+    } catch (err: any) {
+      setDetailUser(null);
+      setError(err.response?.data?.message || 'Failed to load user detail');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false);
+    setDetailUser(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,62 +206,46 @@ const UserManagementPage = () => {
 
       if (editingUser) {
         const updateData: UserUpdateRequest = {
-          ...formData,
+          username: formData.username,
+          role_id: formData.role_id,
+          is_active: formData.is_active,
           location_ids: selectedLocationIds,
           location_id: selectedLocationIds[0] ?? null,
         };
-        if (!updateData.password) {
-          delete updateData.password; 
+
+        if (formData.password.trim()) {
+          updateData.password = formData.password;
         }
-        delete (updateData as any).user_code;
+
         await userService.updateUser(editingUser.user_id, updateData);
       } else {
-        const createData = {
-          ...formData,
+        const createData: UserCreateRequest = {
+          username: formData.username,
+          password: formData.password,
+          role_id: formData.role_id,
+          is_active: formData.is_active,
           location_ids: selectedLocationIds,
           location_id: selectedLocationIds[0] ?? null,
-        } as UserCreateRequest;
-        
-        const userCodePattern = /^USR-\d{4}$/;
-        if (!createData.user_code || !userCodePattern.test(createData.user_code.toUpperCase())) {
-          setError('User code must be in format USR-XXXX (e.g., USR-0001)');
-          return;
-        }
-        
-        createData.user_code = createData.user_code.toUpperCase();
-        
+        };
+
         await userService.createUser(createData);
       }
-      
-      handleCloseModal();
-      loadUsers();
+
+      closeEditModal();
+      await loadUsers();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to save user');
-    }
-  };
-
-  const handleDelete = async (userId: number) => {
-    const accepted = await confirm({
-      title: 'Delete User',
-      message: 'Are you sure you want to delete this user?',
-      confirmText: 'Delete',
-      tone: 'danger',
-    });
-    if (!accepted) return;
-
-    try {
-      await userService.deleteUser(userId);
-      loadUsers();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete user');
     }
   };
 
   const handleToggleStatus = async (user: User) => {
     const action = user.is_active ? 'deactivate' : 'activate';
     const accepted = await confirm({
-      title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} User`,
-      message: `Are you sure you want to ${action} user "${user.username}"?`,
+      title: action === 'deactivate' ? 'Deactivate User' : 'Activate User',
+      message:
+        action === 'deactivate'
+          ? `Are you sure you want to deactivate user "${user.username}"? If this user is currently assigned to Produce, Inspection, or Rework tasks, the system will block this action.`
+          : `Are you sure you want to activate user "${user.username}"?`,
       confirmText: action === 'deactivate' ? 'Deactivate' : 'Activate',
       tone: action === 'deactivate' ? 'danger' : 'default',
     });
@@ -198,84 +253,45 @@ const UserManagementPage = () => {
 
     try {
       await userService.updateUser(user.user_id, { is_active: !user.is_active });
-      loadUsers();
+      await loadUsers();
     } catch (err: any) {
       setError(err.response?.data?.message || `Failed to ${action} user`);
     }
   };
 
-  const getRoleName = (roleId: number) => {
-    const roles: Record<number, string> = {
-      1: 'Admin',
-      2: 'Central Staff',
-      3: 'Store Staff',
-    };
-    return roles[roleId] || 'Unknown';
-  };
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      const userLocationIds = getUserLocationIds(user);
+      const searchTargets = [
+        user.user_code,
+        user.username,
+        getRoleName(user.role_id),
+        getStoreNames(userLocationIds),
+      ]
+        .join(' ')
+        .toLowerCase();
 
-  const getStoreName = (locationId: number | null) => {
-    if (!locationId) return '-';
-    const location = stores.find(s => s.location_id === locationId);
-    return location ? location.location_name : `Location #${locationId}`;
-  };
-
-  const getStoreNames = (locationIds: number[] | undefined) => {
-    if (!locationIds || locationIds.length === 0) return '-';
-
-    return locationIds
-      .map((locationId) => getStoreName(locationId))
-      .join(', ');
-  };
-
-  const getStoreAddress = (locationId: number | null) => {
-    if (!locationId) return '-';
-    const location = stores.find(s => s.location_id === locationId);
-    return location ? location.location_address : '-';
-  };
-
-  const filteredAndSortedUsers = users
-    .filter(user => {
-      const matchesSearch = searchTerm === '' || 
-        user.user_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getRoleName(user.role_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStoreNames(getUserLocationIds(user)).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getStoreAddress(user.location_id).toLowerCase().includes(searchTerm.toLowerCase());
-      
+      const matchesSearch = searchDebounce === '' || searchTargets.includes(searchDebounce.toLowerCase());
       const matchesRole = filterRole === 'all' || user.role_id === filterRole;
-      const matchesStore = filterStore === 'all' || getUserLocationIds(user).includes(filterStore);
-      
-      return matchesSearch && matchesRole && matchesStore;
-    })
-    .sort((a, b) => {
-      let compareValue = 0;
-      
-      switch (sortBy) {
-        case 'user_id':
-          compareValue = a.user_id - b.user_id;
-          break;
-        case 'username':
-          compareValue = a.username.localeCompare(b.username);
-          break;
-        case 'role_id':
-          compareValue = a.role_id - b.role_id;
-          break;
-        case 'location_id':
-          const storeNameA = getStoreNames(getUserLocationIds(a));
-          const storeNameB = getStoreNames(getUserLocationIds(b));
-          compareValue = storeNameA.localeCompare(storeNameB);
-          break;
-      }
-      
-      return sortOrder === 'asc' ? compareValue : -compareValue;
+      const matchesStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'active' && user.is_active) ||
+        (filterStatus === 'inactive' && !user.is_active);
+
+      return matchesSearch && matchesRole && matchesStatus;
     });
+  }, [users, searchDebounce, filterRole, filterStatus]);
+
+  const totalUsers = users.length;
+  const activeUsers = users.filter((user) => user.is_active).length;
+  const inactiveUsers = totalUsers - activeUsers;
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <div className="flex h-[70vh] items-center justify-center rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-cyan-50">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mb-4"></div>
-          <div className="text-xl font-semibold text-gray-700">Loading users...</div>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-600" />
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Loading users</p>
         </div>
       </div>
     );
@@ -283,298 +299,265 @@ const UserManagementPage = () => {
 
   return (
     <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+      <section className="rounded-3xl border border-slate-200 bg-gradient-to-r from-slate-50 via-cyan-50 to-emerald-50 p-6 shadow-sm md:p-8">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 flex items-center">
-              <span className="mr-3">👥</span>
-              User Management
-            </h1>
-            <p className="text-gray-600 mt-2">Manage system users and permissions</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Administration</p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-800">User Management</h1>
+            <p className="mt-2 text-sm text-slate-600">Manage accounts, roles, and assigned locations in a cleaner workflow.</p>
           </div>
+
           <button
-            onClick={() => handleOpenModal()}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center"
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
-            <span className="text-xl mr-2">+</span>
-            Create New User
+            <PlusIcon className="h-5 w-5" />
+            Create User
           </button>
         </div>
 
-      {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-6 py-4 rounded-lg mb-6 flex items-center shadow-md animate-shake">
-          <span className="text-2xl mr-3">⚠️</span>
-          <span>{error}</span>
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Total Users</p>
+            <p className="mt-2 text-2xl font-bold text-slate-800">{totalUsers}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4">
+            <p className="text-xs uppercase tracking-wide text-emerald-700">Active Users</p>
+            <p className="mt-2 text-2xl font-bold text-emerald-800">{activeUsers}</p>
+          </div>
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/80 p-4">
+            <p className="text-xs uppercase tracking-wide text-rose-700">Inactive Users</p>
+            <p className="mt-2 text-2xl font-bold text-rose-800">{inactiveUsers}</p>
+          </div>
         </div>
+      </section>
+
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Total Users</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.length}</p>
-            </div>
-            <div className="text-4xl">👤</div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Active Users</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.is_active).length}</p>
-            </div>
-            <div className="text-4xl">✅</div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Admins</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 1).length}</p>
-            </div>
-            <div className="text-4xl">👑</div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500 transform hover:-translate-y-1 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Staff Members</p>
-              <p className="text-3xl font-bold text-gray-800 mt-1">{users.filter(u => u.role_id === 2 || u.role_id === 3).length}</p>
-            </div>
-            <div className="text-4xl">💼</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
-        {/* Search and Filter Bar */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-2">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50 p-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="relative md:col-span-2">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="🔍 Search by user code, username, role, store name, address..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search by code, username, role, location..."
+                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
               />
             </div>
-            <select 
+
+            <select
               value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
+              onChange={(e) => setFilterRole(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
             >
               <option value="all">All Roles</option>
               <option value={1}>Admin</option>
               <option value={2}>Central Staff</option>
               <option value={3}>Store Staff</option>
             </select>
+
             <select
-              value={filterStore}
-              onChange={(e) => setFilterStore(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-              className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as StatusFilter)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
             >
-              <option value="all">All Stores</option>
-              {stores.map(store => (
-                <option key={store.location_id} value={store.location_id}>
-                  {store.location_name}
-                </option>
-              ))}
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
             </select>
-            <div className="flex gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'user_id' | 'username' | 'role_id' | 'location_id')}
-                className="px-4 py-2 rounded-lg border-2 border-transparent focus:border-white focus:ring-2 focus:ring-white/50 transition-all flex-1"
-              >
-                <option value="user_id">Sort by ID</option>
-                <option value="username">Sort by Username</option>
-                <option value="role_id">Sort by Role</option>
-                <option value="location_id">Sort by Location</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="px-3 py-2 bg-white rounded-lg hover:bg-gray-100 transition-all font-bold"
-                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-              >
-                {sortOrder === 'asc' ? '↑' : '↓'}
-              </button>
-            </div>
           </div>
+
+          <p className="mt-3 text-xs text-slate-500">Showing {filteredUsers.length} user(s)</p>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-50 border-b-2 border-gray-200">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">ID</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">User Code</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Username</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Name</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Store Address</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Actions</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">User</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Role</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Locations</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
               </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredAndSortedUsers.map((user) => (
-              <tr key={user.user_id} className="hover:bg-indigo-50 transition-colors duration-150">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-semibold text-gray-800">#{user.user_id}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="font-bold text-indigo-700 text-lg">{user.user_code}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold mr-3">
-                      {user.username.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="font-medium text-gray-800">{user.username}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${
-                    user.role_id === 1 ? 'bg-red-100 text-red-800' :
-                    user.role_id === 2 ? 'bg-blue-100 text-blue-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {user.role_id === 1 ? '' : user.role_id === 2 ? '' : ''} {getRoleName(user.role_id)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-gray-700 font-medium">{getStoreNames(getUserLocationIds(user))}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-gray-600 text-sm">{getStoreAddress(user.location_id)}</span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    onClick={() => handleToggleStatus(user)}
-                    className={`px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full cursor-pointer transition-all ${
-                      user.is_active ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'
-                    }`}
-                  >
-                    {user.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleOpenModal(user)}
-                    className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold hover:underline"
-                  >
-                    ✏️ 
-                  </button>
-                  <button
-                    onClick={() => handleDelete(user.user_id)}
-                    className="text-red-600 hover:text-red-900 font-semibold hover:underline"
-                  >
-                    🗑️ 
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {filteredUsers.map((user) => {
+                const userLocationIds = getUserLocationIds(user);
+                const previewLocations = userLocationIds.slice(0, 2);
+                const remainingLocationCount = Math.max(0, userLocationIds.length - previewLocations.length);
 
-        {filteredAndSortedUsers.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📭</div>
-            <p className="text-gray-500 text-lg">No users found</p>
-          </div>
-        )}
-      </div>
-      </div>
+                return (
+                  <tr key={user.user_id} className="transition hover:bg-slate-50/70">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                          {user.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{user.username}</p>
+                          <p className="truncate text-xs text-slate-500">{user.user_code}</p>
+                        </div>
+                      </div>
+                    </td>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all animate-slide-up">
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-t-2xl">
-              <h2 className="text-2xl font-bold flex items-center">
-                <span className="mr-2">{editingUser ? '✏️' : '➕'}</span>
-                {editingUser ? 'Edit User' : 'Create New User'}
-              </h2>
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getRoleClassName(user.role_id)}`}>
+                        {getRoleName(user.role_id)}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      {previewLocations.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {previewLocations.map((locationId) => (
+                            <span
+                              key={`${user.user_id}-${locationId}`}
+                              className="inline-flex max-w-[180px] truncate rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                              title={getStoreName(locationId)}
+                            >
+                              {getStoreName(locationId)}
+                            </span>
+                          ))}
+                          {remainingLocationCount > 0 && (
+                            <span className="inline-flex rounded-md border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700">
+                              +{remainingLocationCount} more
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">No locations</span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          user.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                        }`}
+                      >
+                        {user.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => void openDetailModal(user.user_id)}
+                          className="rounded-lg p-2 text-slate-500 transition hover:bg-cyan-50 hover:text-cyan-700"
+                          title="View detail"
+                        >
+                          <EyeIcon className="h-5 w-5" />
+                        </button>
+
+                        <button
+                          onClick={() => openEditModal(user)}
+                          className="rounded-lg p-2 text-slate-500 transition hover:bg-blue-50 hover:text-blue-700"
+                          title="Edit user"
+                        >
+                          <PencilSquareIcon className="h-5 w-5" />
+                        </button>
+
+                        <button
+                          onClick={() => void handleToggleStatus(user)}
+                          className={`rounded-lg p-2 transition ${
+                            user.is_active
+                              ? 'text-rose-600 hover:bg-rose-50 hover:text-rose-700'
+                              : 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700'
+                          }`}
+                          title={user.is_active ? 'Deactivate user' : 'Activate user'}
+                        >
+                          <PowerIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {filteredUsers.length === 0 && (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-semibold text-slate-700">No users found</p>
+              <p className="mt-1 text-xs text-slate-500">Try another keyword or filter option.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">{editingUser ? 'Edit User' : 'Create User'}</h2>
+                <p className="text-xs text-slate-500">
+                  {editingUser
+                    ? 'Update profile, role, and assigned locations.'
+                    : 'User code will be generated automatically by the system.'}
+                </p>
+              </div>
+              <button
+                onClick={closeEditModal}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
             </div>
 
-            <div className="p-6">
-              {error && (
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center">
-                  <span className="text-xl mr-2"></span>
-                  <span>{error}</span>
+            <form onSubmit={handleSubmit} className="space-y-4 p-6">
+              {!editingUser && (
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
+                  User code is auto-generated. You only need to provide account information.
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    User Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.user_code}
-                    onChange={(e) => setFormData({ ...formData, user_code: e.target.value.toUpperCase() })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all uppercase"
-                    placeholder="USR-0001"
-                    pattern="USR-\d{4}"
-                    title="Format: USR-XXXX (e.g., USR-0001)"
-                    required
-                    disabled={!!editingUser}
-                    readOnly={!!editingUser}
-                    style={editingUser ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-                  />
-                  {editingUser && (
-                    <p className="text-sm text-gray-500 mt-1">User code cannot be modified after creation</p>
-                  )}
-                  {!editingUser && (
-                    <p className="text-sm text-gray-500 mt-1">Format: USR-XXXX (e.g., USR-0001, USR-0002)</p>
-                  )}
+              {editingUser && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Current user code: <span className="font-semibold text-slate-800">{editingUser.user_code}</span>
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Username
-                  </label>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Username</label>
                   <input
                     type="text"
                     value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                     placeholder="Enter username"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Password {editingUser && <span className="text-sm text-gray-500 ml-2">(leave blank to keep current)</span>}
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Password
+                    {editingUser && <span className="ml-1 text-xs text-slate-500">(leave blank to keep current)</span>}
                   </label>
                   <input
                     type="password"
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                     placeholder="Enter password"
                     required={!editingUser}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Role
-                  </label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Role</label>
                   <select
                     value={formData.role_id}
-                    onChange={(e) => setFormData({ ...formData, role_id: parseInt(e.target.value) })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, role_id: Number(e.target.value) }))}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                     required
                   >
                     <option value={1}>Admin</option>
@@ -583,61 +566,138 @@ const UserManagementPage = () => {
                   </select>
                 </div>
 
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+                  <select
+                    value={formData.is_active ? 'active' : 'inactive'}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, is_active: e.target.value === 'active' }))}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Assigned Locations</label>
+                <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-300 p-3">
+                  {stores.length === 0 && <p className="text-sm text-slate-500">No active locations available.</p>}
+
+                  {stores.map((store) => {
+                    const checked = getSelectedLocationIdsFromForm().includes(store.location_id);
+                    return (
+                      <label
+                        key={store.location_id}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => handleToggleLocation(store.location_id)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{store.location_name}</p>
+                          <p className="text-xs text-slate-500">{store.location_address}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Selected: {getSelectedLocationIdsFromForm().length === 0 ? 'None' : getStoreNames(getSelectedLocationIdsFromForm())}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  {editingUser ? 'Update User' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDetailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-800">User Detail</h2>
+              <button
+                onClick={closeDetailModal}
+                className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {detailLoading ? (
+              <div className="px-6 py-10 text-center">
+                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-cyan-600" />
+                <p className="text-sm text-slate-500">Loading user detail...</p>
+              </div>
+            ) : detailUser ? (
+              <div className="space-y-5 p-6">
+                <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">User Code</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{detailUser.user_code}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Username</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{detailUser.username}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Role</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{getRoleName(detailUser.role_id)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{detailUser.is_active ? 'Active' : 'Inactive'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Created At</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{new Date(detailUser.created_at).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Updated At</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {detailUser.updated_at ? new Date(detailUser.updated_at).toLocaleString() : '-'}
+                    </p>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center">
-                    <span className="mr-2"></span>
-                    Stores <span className="text-sm text-gray-500 ml-2">(optional, multi-select)</span>
-                  </label>
-                  <div className="w-full border-2 border-gray-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
-                    {stores.length === 0 && (
-                      <p className="text-sm text-gray-500">No active stores found.</p>
+                  <h3 className="text-sm font-semibold text-slate-800">Assigned Locations</h3>
+                  <div className="mt-2 space-y-2">
+                    {getUserLocationIds(detailUser).length === 0 && (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">No locations assigned.</div>
                     )}
 
-                    {stores.map((store) => {
-                      const checked = getSelectedLocationIdsFromForm().includes(store.location_id);
-
-                      return (
-                        <label
-                          key={store.location_id}
-                          className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => handleToggleLocation(store.location_id)}
-                            className="mt-1 h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                          />
-                          <div className="text-sm">
-                            <p className="font-medium text-gray-800">{store.location_name}</p>
-                            <p className="text-gray-500">{store.location_address}</p>
-                          </div>
-                        </label>
-                      );
-                    })}
+                    {getUserLocationIds(detailUser).map((locationId) => (
+                      <div key={`detail-location-${locationId}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p className="text-sm font-medium text-slate-800">{getStoreName(locationId)}</p>
+                        <p className="text-xs text-slate-500">{getStoreAddress(locationId)}</p>
+                      </div>
+                    ))}
                   </div>
-
-                  <p className="text-sm text-gray-500 mt-1">
-                    Selected: {getSelectedLocationIdsFromForm().length === 0 ? 'None' : getStoreNames(getSelectedLocationIdsFromForm())}
-                  </p>
                 </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCloseModal}
-                    className="px-6 py-3 border-2 border-gray-300 rounded-xl hover:bg-gray-50 font-semibold text-gray-700 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
-                  >
-                    {editingUser ? 'Update' : 'Create'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+            ) : (
+              <div className="px-6 py-10 text-center text-sm text-slate-500">User detail is not available.</div>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ export * from './auth';
 export * from './user';
 export * from './location';
 export * from './product';
+export * from './unit';
 export * from './productionPlan';
 export * from './productionBatch';
 export * from './qualityInspection';

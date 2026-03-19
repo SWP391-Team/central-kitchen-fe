@@ -12,7 +12,7 @@ export interface User {
 }
 
 export interface UserCreateRequest {
-  user_code: string;
+  user_code?: string;
   username: string;
   password: string;
   role_id: number;

@@ -20,6 +20,7 @@ export interface QualityInspectionWithDetails extends QualityInspection {
   batch_code?: string;
   product_name?: string;
   product_code?: string;
+  unit_name?: string | null;
   produced_qty?: number;
   batch_status?: string;
   max_inspection_no?: number;
@@ -29,6 +30,13 @@ export interface QualityInspectionWithDetails extends QualityInspection {
 
 export interface QualityInspectionStartRequest {
   batch_id: number;
+  inspect_by?: number;
+}
+
+export interface InspectedBySuggestion {
+  user_id: number;
+  user_code: string;
+  username: string;
 }
 
 export interface QualityInspectionFinishRequest {

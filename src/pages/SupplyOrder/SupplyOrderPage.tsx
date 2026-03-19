@@ -24,6 +24,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { supplyOrderService } from '@/api/services/supplyOrderService';
 import { productService } from '@/api/services/productService';
 import { locationService } from '@/api/services/locationService';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ORDER_STATUSES: Array<'all' | SupplyOrderStatus> = [
   'all',
@@ -56,6 +57,11 @@ const formatDate = (value?: string | null) => {
 const formatDateTime = (value?: string | null) => {
   if (!value) return '-';
   return new Date(value).toLocaleString();
+};
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return '-';
+  return new Date(value).toLocaleDateString();
 };
 
 const getStatusBadgeClass = (status: string) => {
@@ -620,7 +626,7 @@ const SupplyOrderPage = () => {
                   {ckInventoryRows.map((row) => (
                     <tr key={`${row.location_id}-${row.batch_id}-${row.product_id}`}>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        <div className="font-semibold">{row.product_name}</div>
+                        <div className="font-semibold">{formatProductWithUnit(row.product_name, row.unit)}</div>
                         <div className="text-xs text-gray-500">{row.product_code}</div>
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-blue-700">{row.batch_code || row.batch_id}</td>
@@ -873,7 +879,7 @@ const SupplyOrderPage = () => {
                           return (
                             <tr key={item.supply_order_item_id}>
                               <td className="px-4 py-3 text-sm text-gray-900">
-                                <div className="font-semibold">{item.product_name || '-'}</div>
+                                <div className="font-semibold">{formatProductWithUnit(item.product_name, item.unit)}</div>
                                 <div className="text-xs text-gray-500">{item.product_code || '-'}</div>
                               </td>
                               <td className="px-4 py-3 text-sm text-right">{item.requested_qty}</td>
@@ -1008,7 +1014,7 @@ const SupplyOrderPage = () => {
                         <option value="">Select product</option>
                         {products.map((product) => (
                           <option key={product.product_id} value={product.product_id}>
-                            {product.product_name} ({product.product_code})
+                            {formatProductWithUnit(product.product_name, product.unit_name)} ({product.product_code})
                           </option>
                         ))}
                       </select>
@@ -1089,7 +1095,7 @@ const SupplyOrderPage = () => {
                     {approveOrder.items.map((item) => (
                       <tr key={item.supply_order_item_id}>
                         <td className="px-4 py-2 text-sm">
-                          <div className="font-semibold">{item.product_name}</div>
+                          <div className="font-semibold">{formatProductWithUnit(item.product_name, item.unit)}</div>
                           <div className="text-xs text-gray-500">{item.product_code}</div>
                         </td>
                         <td className="px-4 py-2 text-sm text-right">{item.requested_qty}</td>
@@ -1147,8 +1153,8 @@ const SupplyOrderPage = () => {
       )}
 
       {deliveryDraft && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex justify-end">
-          <div className="w-full max-w-lg bg-white h-full shadow-xl overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">Deliver Product</h2>
               <button onClick={() => setDeliveryDraft(null)} className="text-gray-400 hover:text-gray-600">
@@ -1156,9 +1162,9 @@ const SupplyOrderPage = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitDelivery} className="p-5 space-y-4">
+            <form onSubmit={handleSubmitDelivery} className="p-5 space-y-4 overflow-y-auto">
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm">
-                <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{deliveryDraft.item.product_name}</span></p>
+                <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{formatProductWithUnit(deliveryDraft.item.product_name, deliveryDraft.item.unit)}</span></p>
                 <p><span className="text-gray-500">Requested:</span> {deliveryDraft.item.requested_qty}</p>
                 <p><span className="text-gray-500">Approved:</span> {deliveryDraft.item.approved_qty}</p>
                 <p><span className="text-gray-500">Delivered:</span> {deliveryDraft.item.delivered_qty}</p>
@@ -1176,7 +1182,7 @@ const SupplyOrderPage = () => {
                   <option value="">Select batch from CK Warehouse</option>
                   {deliveryBatchOptions.map((row) => (
                     <option key={`${row.location_id}-${row.batch_id}`} value={row.batch_id}>
-                      {row.batch_code || row.batch_id} | {row.location_name} | Avail: {row.qty_available}
+                      {row.batch_code || row.batch_id} | EXP: {formatDateOnly(row.expired_date)} | {row.location_name} | Avail: {row.qty_available}
                     </option>
                   ))}
                 </select>

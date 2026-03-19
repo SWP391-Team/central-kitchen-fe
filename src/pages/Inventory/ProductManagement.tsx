@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { productService } from '@/api/services/productService';
-import { Product, ProductCreateRequest, ProductUpdateRequest } from '@/api/types';
+import { unitService } from '@/api/services/unitService';
+import { Product, ProductCreateRequest, ProductUpdateRequest, Unit } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { PencilIcon, MagnifyingGlassIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
@@ -10,11 +11,12 @@ const ProductManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [activeUnits, setActiveUnits] = useState<Unit[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductCreateRequest>({
     product_name: '',
-    unit: '',
+    unit_id: 0,
     shelf_life_days: 0,
   });
   const { showToast } = useToast();
@@ -45,6 +47,34 @@ const ProductManagement = () => {
     return () => clearTimeout(timeoutId);
   }, [searchTerm, statusFilter]);
 
+  useEffect(() => {
+    const loadActiveUnits = async () => {
+      try {
+        const units = await unitService.getActiveUnits();
+        setActiveUnits(units);
+      } catch (error) {
+        console.error('Error loading active units:', error);
+        showToast('Failed to load active units', 'error');
+      }
+    };
+
+    loadActiveUnits();
+  }, []);
+
+  const unitOptions = editingProduct && editingProduct.unit_id
+    ? activeUnits.some((item) => item.unit_id === editingProduct.unit_id)
+      ? activeUnits
+      : [
+          ...activeUnits,
+          {
+            unit_id: editingProduct.unit_id,
+            unit_code: '',
+            unit_name: editingProduct.unit_name || 'Unknown Unit',
+            is_active: false,
+          } as Unit,
+        ]
+    : activeUnits;
+
   const handleSearchExecute = async (term: string) => {
     try {
       const data = await productService.searchProducts(term);
@@ -59,14 +89,14 @@ const ProductManagement = () => {
       setEditingProduct(product);
       setFormData({
         product_name: product.product_name,
-        unit: product.unit,
+        unit_id: product.unit_id,
         shelf_life_days: product.shelf_life_days,
       });
     } else {
       setEditingProduct(null);
       setFormData({
         product_name: '',
-        unit: '',
+        unit_id: 0,
         shelf_life_days: 0,
       });
     }
@@ -78,7 +108,7 @@ const ProductManagement = () => {
     setEditingProduct(null);
     setFormData({
       product_name: '',
-      unit: '',
+      unit_id: 0,
       shelf_life_days: 0,
     });
   };
@@ -86,7 +116,7 @@ const ProductManagement = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.product_name.trim() || !formData.unit.trim()) {
+    if (!formData.product_name.trim() || !formData.unit_id) {
       showToast('Please fill in all fields', 'error');
       return;
     }
@@ -106,7 +136,7 @@ const ProductManagement = () => {
       if (editingProduct) {
         const updateData: ProductUpdateRequest = {
           product_name: formData.product_name,
-          unit: formData.unit,
+          unit_id: formData.unit_id,
           shelf_life_days: formData.shelf_life_days,
         };
         await productService.updateProduct(editingProduct.product_id, updateData);
@@ -221,6 +251,15 @@ const ProductManagement = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Created At
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created By
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Last Updated
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Updated By
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -239,7 +278,7 @@ const ProductManagement = () => {
                     {product.product_name}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {product.unit}
+                    {product.unit_name || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {product.shelf_life_days}
@@ -257,6 +296,15 @@ const ProductManagement = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {product.created_at ? new Date(product.created_at).toLocaleDateString() : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {product.created_by_username || product.created_by || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {product.updated_at ? new Date(product.updated_at).toLocaleString() : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {product.updated_by_username || product.updated_by || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -310,14 +358,20 @@ const ProductManagement = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Unit *
                 </label>
-                <input
-                  type="text"
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                <select
+                  value={formData.unit_id || ''}
+                  onChange={(e) => setFormData({ ...formData, unit_id: Number(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Kg"
                   required
-                />
+                >
+                  <option value="">Select unit</option>
+                  {unitOptions.map((unit) => (
+                    <option key={unit.unit_id} value={unit.unit_id}>
+                      {unit.unit_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Only active units can be selected for new products</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

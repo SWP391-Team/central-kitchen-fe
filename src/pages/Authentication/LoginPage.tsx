@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/api/services/userService';
+
+const AUTH_USER_STORAGE_KEY = 'auth_user';
+const TOKEN_STORAGE_KEY = 'token';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState<boolean>(() => !!localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -18,10 +24,16 @@ const LoginPage = () => {
 
     try {
       const response = await authService.login({ username, password });
-      
-      localStorage.setItem('token', response.token);
-      
-      login({
+
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(AUTH_USER_STORAGE_KEY);
+
+      const targetStorage = rememberMe ? localStorage : sessionStorage;
+      targetStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+
+      const authenticatedUser = {
         user_id: response.user.user_id,
         user_code: response.user.user_code,
         username: response.user.username,
@@ -30,11 +42,22 @@ const LoginPage = () => {
         location_ids: response.user.location_ids || (response.user.location_id ? [response.user.location_id] : []),
         is_active: true,
         created_at: new Date().toISOString(),
-      });
+      };
+
+      targetStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(authenticatedUser));
+      login(authenticatedUser, rememberMe);
 
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      const status = err?.response?.status;
+      const apiMessage = err?.response?.data?.message;
+      if (status === 401) {
+        setError('Sai username hoặc password. Vui lòng kiểm tra lại.');
+      } else if (typeof apiMessage === 'string' && /invalid|credential|username|password/i.test(apiMessage)) {
+        setError('Sai username hoặc password. Vui lòng kiểm tra lại.');
+      } else {
+        setError(apiMessage || 'Đăng nhập thất bại. Vui lòng thử lại.');
+      }
     } finally {
       setLoading(false);
     }
@@ -72,68 +95,62 @@ const LoginPage = () => {
 
         <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on">
           <div>
-            <label htmlFor="username" className="block text-gray-700 font-semibold mb-2 flex items-center">
-              <span className="mr-2">👤</span>
+            <label htmlFor="username" className="block text-gray-700 font-semibold mb-2">
               Username
             </label>
-            <div className="relative">
-              <input
-                type="text"
-                id="username"
-                name="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 pl-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
-                placeholder="Enter your username"
-                autoComplete="username"
-                required
-                disabled={loading}
-              />
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-            </div>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
+              placeholder="Enter your username"
+              autoComplete="username"
+              required
+              disabled={loading}
+            />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-gray-700 font-semibold mb-2 flex items-center">
-              <span className="mr-2">🔒</span>
+            <label htmlFor="password" className="block text-gray-700 font-semibold mb-2">
               Password
             </label>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 id="password"
-                name="password_no_suggest"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 pl-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
+                className="w-full px-4 py-3 pr-12 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all duration-200"
                 placeholder="Enter your password"
-                autoComplete="new-password"
-                data-lpignore="true"
-                data-1p-ignore="true"
-                data-form-type="other"
+                autoComplete="current-password"
                 required
                 disabled={loading}
               />
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex items-center text-sm">
             <label className="flex items-center cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                disabled={loading}
+              />
               <span className="ml-2 text-gray-600">Remember me</span>
             </label>
-            <a href="#" className="text-indigo-600 hover:text-indigo-800 font-semibold">
-              Forgot password?
-            </a>
           </div>
 
           <button
@@ -157,15 +174,6 @@ const LoginPage = () => {
             )}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <p className="text-gray-600 text-sm">
-            Don't have an account?{' '}
-            <a href="#" className="text-indigo-600 hover:text-indigo-800 font-semibold">
-              Contact Admin
-            </a>
-          </p>
-        </div>
       </div>
     </div>
   );

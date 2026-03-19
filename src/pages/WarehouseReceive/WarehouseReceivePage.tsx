@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { batchTransferService } from '@/api/services/batchTransferService';
 import { warehouseReceiveService } from '@/api/services/warehouseReceiveService';
-import { BatchTransferWithDetails, WarehouseReceiveWithDetails } from '@/api/types';
+import { BatchTransferWithDetails, ReceivedBySuggestion, WarehouseReceiveWithDetails } from '@/api/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { XMarkIcon, InboxArrowDownIcon, EyeIcon } from '@heroicons/react/24/outline';
 import PaginationControls from '@/components/PaginationControls';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const WarehouseReceivePage = () => {
   const { isAdmin, isCentralStaff, isStoreStaff } = useAuth();
@@ -39,6 +40,9 @@ const WarehouseReceivePage = () => {
   const [receivedQty, setReceivedQty] = useState<number>(0);
   const [receivedDate, setReceivedDate] = useState<string>('');
   const [receiveMaxQty, setReceiveMaxQty] = useState<number>(0);
+  const [receivedByQuery, setReceivedByQuery] = useState('');
+  const [receivedBySuggestions, setReceivedBySuggestions] = useState<ReceivedBySuggestion[]>([]);
+  const [selectedReceivedById, setSelectedReceivedById] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -93,7 +97,24 @@ const WarehouseReceivePage = () => {
     }
   };
 
-  const handleOpenReceiveModal = (transfer: BatchTransferWithDetails) => {
+  const handleSearchReceivedBy = async (transferId: number, keyword: string) => {
+    try {
+      const suggestions = await warehouseReceiveService.searchReceivedBySuggestions(transferId, keyword);
+      setReceivedBySuggestions(suggestions);
+    } catch {
+      setReceivedBySuggestions([]);
+    }
+  };
+
+  const handleCloseReceiveModal = () => {
+    setShowReceiveModal(false);
+    setSelectedTransfer(null);
+    setReceivedByQuery('');
+    setReceivedBySuggestions([]);
+    setSelectedReceivedById(null);
+  };
+
+  const handleOpenReceiveModal = async (transfer: BatchTransferWithDetails) => {
     setSelectedTransfer(transfer);
     setReceivedQty(0);
     const now = new Date();
@@ -103,7 +124,20 @@ const WarehouseReceivePage = () => {
     setReceivedDate(localISO);
     const alreadyReceived = transfer.already_received_qty ?? 0;
     setReceiveMaxQty(transfer.transfer_qty - alreadyReceived);
+    setReceivedByQuery('');
+    setReceivedBySuggestions([]);
+    setSelectedReceivedById(null);
     setShowReceiveModal(true);
+
+    try {
+      const suggestions = await warehouseReceiveService.searchReceivedBySuggestions(
+        transfer.batch_transfer_id,
+        ''
+      );
+      setReceivedBySuggestions(suggestions);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to load Received By suggestions', 'error');
+    }
   };
 
   const handleReceiveSubmit = async (e: React.FormEvent) => {
@@ -113,16 +147,22 @@ const WarehouseReceivePage = () => {
       showToast(`Received qty must be between 0 and ${receiveMaxQty}`, 'error');
       return;
     }
+
+    if (!selectedReceivedById) {
+      showToast('Please select Received By', 'error');
+      return;
+    }
+
     try {
       setSubmitting(true);
       await warehouseReceiveService.create({
         batch_transfer_id: selectedTransfer.batch_transfer_id,
         received_qty: receivedQty,
         received_date: new Date(receivedDate).toISOString(),
+        received_by: selectedReceivedById,
       });
       showToast('Warehouse receive created successfully!', 'success');
-      setShowReceiveModal(false);
-      setSelectedTransfer(null);
+      handleCloseReceiveModal();
       await loadDeliveringTransfers();
     } catch (err: any) {
       showToast(
@@ -165,11 +205,8 @@ const WarehouseReceivePage = () => {
     setRelatedBatchTransfer(null);
 
     try {
-      const allTransfers = await batchTransferService.getAll();
-      const matchedTransfer = allTransfers.find(
-        (t) => t.batch_transfer_id === warehouseReceive.batch_transfer_id
-      );
-      setRelatedBatchTransfer(matchedTransfer || null);
+      const transfer = await batchTransferService.getById(warehouseReceive.batch_transfer_id);
+      setRelatedBatchTransfer(transfer || null);
     } catch {
       showToast('Failed to load related batch transfer details', 'error');
     } finally {
@@ -330,7 +367,7 @@ const WarehouseReceivePage = () => {
                           {bt.batch_code || bt.batch_id}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
-                          <div>{bt.product_name}</div>
+                          <div>{formatProductWithUnit(bt.product_name, bt.unit_name)}</div>
                           <div className="text-xs text-gray-500">{bt.product_code}</div>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-semibold">{bt.transfer_qty}</td>
@@ -464,7 +501,7 @@ const WarehouseReceivePage = () => {
                         {wr.batch_code || wr.batch_id}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        <div>{wr.product_name}</div>
+                        <div>{formatProductWithUnit(wr.product_name, wr.unit_name)}</div>
                         <div className="text-xs text-gray-500">{wr.product_code}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">{wr.location_name || wr.location_id}</td>
@@ -560,7 +597,7 @@ const WarehouseReceivePage = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Product</span>
-                    <p className="font-semibold">{selectedWarehouseReceive.product_name || '-'}</p>
+                    <p className="font-semibold">{formatProductWithUnit(selectedWarehouseReceive.product_name, selectedWarehouseReceive.unit_name)}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Product Code</span>
@@ -629,7 +666,7 @@ const WarehouseReceivePage = () => {
                     </div>
                     <div>
                       <span className="text-gray-500">Product</span>
-                      <p className="font-semibold">{relatedBatchTransfer.product_name || '-'}</p>
+                      <p className="font-semibold">{formatProductWithUnit(relatedBatchTransfer.product_name, relatedBatchTransfer.unit_name)}</p>
                     </div>
                     <div>
                       <span className="text-gray-500">Product Code</span>
@@ -683,7 +720,7 @@ const WarehouseReceivePage = () => {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-800">Warehouse Receive</h2>
               <button
-                onClick={() => { setShowReceiveModal(false); setSelectedTransfer(null); }}
+                onClick={handleCloseReceiveModal}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <XMarkIcon className="w-6 h-6" />
@@ -698,7 +735,7 @@ const WarehouseReceivePage = () => {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500 font-medium">Product:</span>
-                <span className="font-semibold">{selectedTransfer.product_name}</span>
+                <span className="font-semibold">{formatProductWithUnit(selectedTransfer.product_name, selectedTransfer.unit_name)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500 font-medium">Transfer Qty:</span>
@@ -755,10 +792,50 @@ const WarehouseReceivePage = () => {
                 />
               </div>
 
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Received By <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={receivedByQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setReceivedByQuery(value);
+                    setSelectedReceivedById(null);
+                    if (selectedTransfer) {
+                      handleSearchReceivedBy(selectedTransfer.batch_transfer_id, value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Type username or user code"
+                  required
+                />
+                {receivedBySuggestions.length > 0 && (
+                  <div className="mt-2 border border-gray-200 rounded-lg max-h-52 overflow-auto bg-white">
+                    {receivedBySuggestions.map((item) => (
+                      <button
+                        key={item.user_id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedReceivedById(item.user_id);
+                          setReceivedByQuery(`${item.user_code} - ${item.username}`);
+                          setReceivedBySuggestions([]);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                      >
+                        <span className="font-medium text-gray-900">{item.username}</span>
+                        <span className="ml-2 text-xs text-gray-500">{item.user_code}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => { setShowReceiveModal(false); setSelectedTransfer(null); }}
+                  onClick={handleCloseReceiveModal}
                   className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
                 >
                   Cancel

@@ -1,7 +1,12 @@
 import api from '../axiosConfig';
-import { ReworkRecordWithDetails, ReworkRecordStartRequest, ReworkRecordFinishRequest } from '../types/reworkRecord';
+import { ReworkBySuggestion, ReworkRecordWithDetails, ReworkRecordStartRequest, ReworkRecordFinishRequest } from '../types/reworkRecord';
 
 export const reworkRecordService = {
+  async searchReworkBySuggestions(keyword: string): Promise<ReworkBySuggestion[]> {
+    const response = await api.get(`/rework-records/rework-by-suggestions?q=${encodeURIComponent(keyword)}`);
+    return response.data.data;
+  },
+
   async startRework(data: ReworkRecordStartRequest) {
     const response = await api.post('/rework-records/start', data);
     return response.data;
@@ -34,6 +39,12 @@ export const reworkRecordService = {
 
   async getReworksByBatchId(batchId: number): Promise<ReworkRecordWithDetails[]> {
     const response = await api.get(`/rework-records/batch/${batchId}`);
+    return response.data.data;
+  },
+
+  async getReworksByBatchIds(batchIds: number[]): Promise<ReworkRecordWithDetails[]> {
+    if (batchIds.length === 0) return [];
+    const response = await api.get(`/rework-records/by-batch-ids?ids=${batchIds.join(',')}`);
     return response.data.data;
   },
 };

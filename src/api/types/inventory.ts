@@ -14,6 +14,7 @@ export interface InventoryTransaction {
   location_name?: string;
   product_name?: string;
   product_code?: string;
+  unit_name?: string | null;
   batch_code?: string;
 }
 
@@ -30,5 +31,8 @@ export interface BatchInventory {
   location_name?: string;
   product_name?: string;
   product_code?: string;
+  unit_name?: string | null;
   batch_code?: string;
+  production_date?: string | null;
+  expired_date?: string | null;
 }

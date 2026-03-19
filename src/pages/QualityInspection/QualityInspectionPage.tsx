@@ -3,6 +3,7 @@ import { productionBatchService } from '@/api/services/productionBatchService';
 import { qualityInspectionService } from '@/api/services/qualityInspectionService';
 import { reworkRecordService } from '@/api/services/reworkRecordService';
 import {
+  InspectedBySuggestion,
   ProductionBatchWithDetails,
   QualityInspectionWithDetails,
   QualityInspectionFinishRequest,
@@ -13,6 +14,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { MagnifyingGlassIcon, XMarkIcon, EyeIcon } from '@heroicons/react/24/outline';
 import PaginationControls from '@/components/PaginationControls';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const QualityInspectionPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
@@ -42,8 +44,14 @@ const QualityInspectionPage = () => {
   const pageSize = 10;
   
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [showStartModal, setShowStartModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<QualityInspectionWithDetails | null>(null);
+  const [selectedBatchForStart, setSelectedBatchForStart] = useState<ProductionBatchWithDetails | null>(null);
+  const [inspectByQuery, setInspectByQuery] = useState('');
+  const [inspectBySuggestions, setInspectBySuggestions] = useState<InspectedBySuggestion[]>([]);
+  const [selectedInspectById, setSelectedInspectById] = useState<number | null>(null);
+  const [startSubmitting, setStartSubmitting] = useState(false);
   const [finishData, setFinishData] = useState<QualityInspectionFinishRequest>({
     inspection_mode: 'sampling',
     inspected_qty: 0,
@@ -161,20 +169,21 @@ const QualityInspectionPage = () => {
       return;
     }
 
-    const reworkResults = await Promise.all(
-      missingBatchIds.map(async (batchId) => {
-        try {
-          const reworks = await reworkRecordService.getReworksByBatchId(batchId);
-          return { batchId, reworks };
-        } catch {
-          return { batchId, reworks: [] as ReworkRecordWithDetails[] };
-        }
-      })
-    );
+    const reworks = await reworkRecordService.getReworksByBatchIds(missingBatchIds);
+    const grouped = new Map<number, ReworkRecordWithDetails[]>();
+    for (const item of reworks) {
+      const key = item.batch_id;
+      const current = grouped.get(key);
+      if (current) {
+        current.push(item);
+      } else {
+        grouped.set(key, [item]);
+      }
+    }
 
     const nextCache = { ...batchReworksCacheRef.current };
-    reworkResults.forEach(({ batchId, reworks }) => {
-      nextCache[batchId] = reworks;
+    missingBatchIds.forEach((batchId) => {
+      nextCache[batchId] = grouped.get(batchId) || [];
     });
 
     batchReworksCacheRef.current = nextCache;
@@ -269,23 +278,64 @@ const QualityInspectionPage = () => {
     return latestRework.reworkable_qty || 0;
   };
 
-  const handleStartInspection = async (batch: ProductionBatchWithDetails) => {
-    const accepted = await confirm({
-      title: 'Start Inspection',
-      message: `Start quality inspection for batch ${batch.batch_code}?`,
-      confirmText: 'Start',
-    });
-    if (!accepted) return;
+  const handleSearchInspectedBy = async (keyword: string) => {
+    try {
+      const data = await qualityInspectionService.searchInspectedBySuggestions(keyword);
+      setInspectBySuggestions(data);
+    } catch {
+      setInspectBySuggestions([]);
+    }
+  };
+
+  const handleOpenStartModal = async (batch: ProductionBatchWithDetails) => {
+    setSelectedBatchForStart(batch);
+    setShowStartModal(true);
+    setInspectByQuery('');
+    setInspectBySuggestions([]);
+    setSelectedInspectById(null);
 
     try {
-      await qualityInspectionService.startInspection({ batch_id: batch.batch_id });
+      const suggestions = await qualityInspectionService.searchInspectedBySuggestions('');
+      setInspectBySuggestions(suggestions);
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to load Inspect By suggestions', 'error');
+    }
+  };
+
+  const handleCloseStartModal = () => {
+    setShowStartModal(false);
+    setSelectedBatchForStart(null);
+    setInspectByQuery('');
+    setInspectBySuggestions([]);
+    setSelectedInspectById(null);
+  };
+
+  const handleConfirmStartInspection = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedBatchForStart) return;
+    if (!selectedInspectById) {
+      showToast('Please select Inspect By', 'error');
+      return;
+    }
+
+    try {
+      setStartSubmitting(true);
+      await qualityInspectionService.startInspection({
+        batch_id: selectedBatchForStart.batch_id,
+        inspect_by: selectedInspectById,
+      });
+
       showToast('Inspection started successfully!', 'success');
-      loadBatches();
+      handleCloseStartModal();
+      await loadBatches();
       setActiveTab('inspections');
-      loadInspections();
+      await loadInspections();
     } catch (error: any) {
       console.error('Error starting inspection:', error);
       showToast(error.response?.data?.message || 'Failed to start inspection', 'error');
+    } finally {
+      setStartSubmitting(false);
     }
   };
 
@@ -684,7 +734,7 @@ const QualityInspectionPage = () => {
                     <tr key={batch.batch_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{batch.batch_code}</td>
                       <td className="px-4 py-3 text-sm">
-                        {batch.product_name}
+                        {formatProductWithUnit(batch.product_name, batch.unit_name)}
                         <br />
                         <span className="text-xs text-gray-500">{batch.product_code}</span>
                       </td>
@@ -702,7 +752,7 @@ const QualityInspectionPage = () => {
                           <div className="flex gap-2">
                             {batch.status === 'waiting_qc' && (
                               <button
-                                onClick={() => handleStartInspection(batch)}
+                                onClick={() => handleOpenStartModal(batch)}
                                 className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold"
                               >
                                 Start Inspection
@@ -836,7 +886,7 @@ const QualityInspectionPage = () => {
                         <td className="px-4 py-3 text-sm font-semibold text-blue-700">{inspection.quality_inspection_code}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-purple-700">{inspection.batch_code}</td>
                         <td className="px-4 py-3 text-sm">
-                          {inspection.product_name}
+                          {formatProductWithUnit(inspection.product_name, inspection.unit_name)}
                           <br />
                           <span className="text-xs text-gray-500">{inspection.product_code}</span>
                         </td>
@@ -899,12 +949,14 @@ const QualityInspectionPage = () => {
                                    inspection.inspection_no === inspection.max_inspection_no && 
                                    inspection.batch_status === 'qc_failed' && (
                                     <>
-                                      <button
-                                        onClick={() => handleSendReworkRequest(inspection)}
-                                        className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs font-semibold"
-                                      >
-                                        Send Rework Request
-                                      </button>
+                                      {inspection.inspection_mode !== 'sampling' && (
+                                        <button
+                                          onClick={() => handleSendReworkRequest(inspection)}
+                                          className="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 text-xs font-semibold"
+                                        >
+                                          Send Rework Request
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => handleRejectBatch(inspection)}
                                         className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-xs font-semibold"
@@ -935,6 +987,101 @@ const QualityInspectionPage = () => {
         </>
       )}
 
+      {/* Start Inspection Modal */}
+      {showStartModal && selectedBatchForStart && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Start Inspection</h2>
+              <button onClick={handleCloseStartModal} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmStartInspection} className="overflow-y-auto flex-1">
+              <div className="px-6 py-4 space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-gray-600">Batch Code:</span>
+                      <span className="ml-2 font-semibold">{selectedBatchForStart.batch_code}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Product:</span>
+                      <span className="ml-2 font-semibold">{formatProductWithUnit(selectedBatchForStart.product_name, selectedBatchForStart.unit_name)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Source:</span>
+                      <span className="ml-2 font-semibold">{getSourceFromBatch(selectedBatchForStart.batch_id)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Source Qty:</span>
+                      <span className="ml-2 font-semibold text-blue-700">{getSourceQtyFromBatch(selectedBatchForStart)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Inspect By <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={inspectByQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setInspectByQuery(value);
+                      setSelectedInspectById(null);
+                      handleSearchInspectedBy(value);
+                    }}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Type username or user code"
+                    required
+                  />
+                  {inspectBySuggestions.length > 0 && (
+                    <div className="mt-2 border border-gray-200 rounded-lg max-h-52 overflow-auto bg-white">
+                      {inspectBySuggestions.map((item) => (
+                        <button
+                          key={item.user_id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedInspectById(item.user_id);
+                            setInspectByQuery(`${item.user_code} - ${item.username}`);
+                            setInspectBySuggestions([]);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                        >
+                          <span className="font-medium text-gray-900">{item.username}</span>
+                          <span className="ml-2 text-xs text-gray-500">{item.user_code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={handleCloseStartModal}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  disabled={startSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={startSubmitting}
+                >
+                  {startSubmitting ? 'Starting...' : 'Start Inspection'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Finish Inspection Modal */}
       {showFinishModal && selectedInspection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -957,11 +1104,15 @@ const QualityInspectionPage = () => {
                     </div>
                     <div>
                       <span className="text-gray-600">Product:</span>
-                      <span className="ml-2 font-semibold">{selectedInspection.product_name}</span>
+                      <span className="ml-2 font-semibold">{formatProductWithUnit(selectedInspection.product_name, selectedInspection.unit_name)}</span>
                     </div>
                     <div>
                       <span className="text-gray-600">Inspection No:</span>
                       <span className="ml-2 font-semibold">{selectedInspection.inspection_no}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Inspected By:</span>
+                      <span className="ml-2 font-semibold">{selectedInspection.inspected_by_username || '-'}</span>
                     </div>
                     <div>
                       <span className="text-gray-600">Source:</span>
@@ -1323,7 +1474,7 @@ const QualityInspectionPage = () => {
                   </div>
                   <div>
                     <span className="text-sm text-gray-600">Product Name:</span>
-                    <p className="font-semibold">{selectedInspection.product_name}</p>
+                    <p className="font-semibold">{formatProductWithUnit(selectedInspection.product_name, selectedInspection.unit_name)}</p>
                   </div>
                   <div>
                     <span className="text-sm text-gray-600">Product Code:</span>

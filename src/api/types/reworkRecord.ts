@@ -21,6 +21,7 @@ export interface ReworkRecordWithDetails extends ReworkRecord {
   batch_status?: string;
   product_name?: string;
   product_code?: string;
+  unit_name?: string | null;
   rework_by_username?: string;
   created_by_username?: string;
   max_rework_no?: number;
@@ -29,6 +30,13 @@ export interface ReworkRecordWithDetails extends ReworkRecord {
 export interface ReworkRecordStartRequest {
   batch_id: number;
   quality_inspection_id: number;
+  rework_by: number;
+}
+
+export interface ReworkBySuggestion {
+  user_id: number;
+  user_code: string;
+  username: string;
 }
 
 export interface ReworkRecordFinishRequest {

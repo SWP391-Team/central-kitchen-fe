@@ -11,6 +11,7 @@ import {
   EyeIcon,
 } from '@heroicons/react/24/outline';
 import PaginationControls from '@/components/PaginationControls';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const BatchTransferPage = () => {
   const { showToast } = useToast();
@@ -204,7 +205,7 @@ const BatchTransferPage = () => {
                     <td className="px-4 py-3 text-sm font-mono font-semibold text-blue-700">{bt.batch_transfer_code || '-'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-purple-700">{bt.batch_code || bt.batch_id}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      <div>{bt.product_name}</div>
+                      <div>{formatProductWithUnit(bt.product_name, bt.unit_name)}</div>
                       <div className="text-xs text-gray-500">{bt.product_code}</div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{bt.from_location_name || bt.from_location_id}</td>
@@ -292,7 +293,7 @@ const BatchTransferPage = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Product</span>
-                    <p className="font-semibold">{selectedTransferForDetail.product_name || '-'}</p>
+                    <p className="font-semibold">{formatProductWithUnit(selectedTransferForDetail.product_name, selectedTransferForDetail.unit_name)}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Product Code</span>

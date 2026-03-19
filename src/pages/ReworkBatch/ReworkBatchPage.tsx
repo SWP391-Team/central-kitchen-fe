@@ -4,6 +4,7 @@ import { reworkRecordService } from '@/api/services/reworkRecordService';
 import { qualityInspectionService } from '@/api/services/qualityInspectionService';
 import {
   ProductionBatchWithDetails,
+  ReworkBySuggestion,
   ReworkRecordWithDetails,
   QualityInspectionWithDetails,
 } from '@/api/types';
@@ -12,6 +13,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { PlusIcon, XMarkIcon, MagnifyingGlassIcon, EyeIcon } from '@heroicons/react/24/outline';
 import PaginationControls from '@/components/PaginationControls';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ReworkBatchPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
@@ -27,6 +29,9 @@ const ReworkBatchPage = () => {
   const [showStartReworkModal, setShowStartReworkModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<ProductionBatchWithDetails | null>(null);
   const [failedInspection, setFailedInspection] = useState<QualityInspectionWithDetails | null>(null);
+  const [reworkByQuery, setReworkByQuery] = useState('');
+  const [reworkBySuggestions, setReworkBySuggestions] = useState<ReworkBySuggestion[]>([]);
+  const [selectedReworkById, setSelectedReworkById] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
 
   const [showFinishReworkModal, setShowFinishReworkModal] = useState(false);
@@ -104,28 +109,57 @@ const ReworkBatchPage = () => {
       setSelectedBatch(batch);
       setFailedInspection(failed);
       setShowStartReworkModal(true);
+      setReworkByQuery('');
+      setReworkBySuggestions([]);
+      setSelectedReworkById(null);
+
+      const suggestions = await reworkRecordService.searchReworkBySuggestions('');
+      setReworkBySuggestions(suggestions);
     } catch (error: any) {
       showToast(error.response?.data?.message || 'Failed to load inspection data', 'error');
     }
   };
 
-  const handleStartRework = async () => {
+  const handleCloseStartReworkModal = () => {
+    setShowStartReworkModal(false);
+    setSelectedBatch(null);
+    setFailedInspection(null);
+    setReworkByQuery('');
+    setReworkBySuggestions([]);
+    setSelectedReworkById(null);
+  };
+
+  const handleSearchReworkBy = async (keyword: string) => {
+    try {
+      const suggestions = await reworkRecordService.searchReworkBySuggestions(keyword);
+      setReworkBySuggestions(suggestions);
+    } catch {
+      setReworkBySuggestions([]);
+    }
+  };
+
+  const handleStartRework = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedBatch || !failedInspection) return;
+
+    if (!selectedReworkById) {
+      showToast('Please select Rework By', 'error');
+      return;
+    }
 
     try {
       setStarting(true);
       await reworkRecordService.startRework({
         batch_id: selectedBatch.batch_id,
         quality_inspection_id: failedInspection.quality_inspection_id,
+        rework_by: selectedReworkById,
       });
       
       showToast('Rework started successfully!', 'success');
-      setShowStartReworkModal(false);
-      setSelectedBatch(null);
-      setFailedInspection(null);
-      loadBatches();
+      handleCloseStartReworkModal();
+      await loadBatches();
       setActiveTab('reworks');
-      loadReworks();
+      await loadReworks();
     } catch (error: any) {
       console.error('Error starting rework:', error);
       showToast(error.response?.data?.message || 'Failed to start rework', 'error');
@@ -395,7 +429,7 @@ const ReworkBatchPage = () => {
                     <tr key={batch.batch_id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{batch.batch_code}</td>
                       <td className="px-4 py-3 text-sm">
-                        {batch.product_name}
+                        {formatProductWithUnit(batch.product_name, batch.unit_name)}
                         <br />
                         <span className="text-xs text-gray-500">{batch.product_code}</span>
                       </td>
@@ -466,7 +500,7 @@ const ReworkBatchPage = () => {
                       <td className="px-4 py-3 text-sm font-semibold text-blue-700">{rework.rework_code}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">{rework.batch_code}</td>
                       <td className="px-4 py-3 text-sm">
-                        {rework.product_name}
+                        {formatProductWithUnit(rework.product_name, rework.unit_name)}
                         <br />
                         <span className="text-xs text-gray-500">{rework.product_code}</span>
                       </td>
@@ -547,50 +581,91 @@ const ReworkBatchPage = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-900">Start Rework</h2>
-              <button onClick={() => setShowStartReworkModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={handleCloseStartReworkModal} className="text-gray-400 hover:text-gray-600">
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
 
-            <div className="px-6 py-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-600">Batch Code:</span>
-                    <span className="ml-2 font-semibold">{selectedBatch.batch_code}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Product:</span>
-                    <span className="ml-2 font-semibold">{selectedBatch.product_name}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Failed Qty:</span>
-                    <span className="ml-2 font-semibold text-red-600">{failedInspection.failed_qty}</span>
+            <form onSubmit={handleStartRework}>
+              <div className="px-6 py-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-gray-600">Batch Code:</span>
+                      <span className="ml-2 font-semibold">{selectedBatch.batch_code}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Product:</span>
+                      <span className="ml-2 font-semibold">{formatProductWithUnit(selectedBatch.product_name, selectedBatch.unit_name)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Failed Qty:</span>
+                      <span className="ml-2 font-semibold text-red-600">{failedInspection.failed_qty}</span>
+                    </div>
                   </div>
                 </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Rework By <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={reworkByQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setReworkByQuery(value);
+                      setSelectedReworkById(null);
+                      handleSearchReworkBy(value);
+                    }}
+                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Type username or user code"
+                    required
+                  />
+                  {reworkBySuggestions.length > 0 && (
+                    <div className="mt-2 border border-gray-200 rounded-lg max-h-52 overflow-auto bg-white">
+                      {reworkBySuggestions.map((item) => (
+                        <button
+                          key={item.user_id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedReworkById(item.user_id);
+                            setReworkByQuery(`${item.user_code} - ${item.username}`);
+                            setReworkBySuggestions([]);
+                          }}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-b-0"
+                        >
+                          <span className="font-medium text-gray-900">{item.username}</span>
+                          <span className="ml-2 text-xs text-gray-500">{item.user_code}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-sm text-gray-600 mb-1">
+                  This will mark the batch as "Reworking" and create a rework record. Do you want to continue?
+                </p>
               </div>
 
-              <p className="text-sm text-gray-600 mb-4">
-                This will mark the batch as "Reworking" and create a rework record. Do you want to continue?
-              </p>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowStartReworkModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                disabled={starting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleStartRework}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={starting}
-              >
-                {starting ? 'Starting...' : 'Start Rework'}
-              </button>
-            </div>
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseStartReworkModal}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                  disabled={starting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={starting}
+                >
+                  {starting ? 'Starting...' : 'Start Rework'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -620,11 +695,15 @@ const ReworkBatchPage = () => {
                     </div>
                     <div>
                       <span className="text-gray-600">Product:</span>
-                      <span className="ml-2 font-semibold">{selectedRework.product_name}</span>
+                      <span className="ml-2 font-semibold">{formatProductWithUnit(selectedRework.product_name, selectedRework.unit_name)}</span>
                     </div>
                     <div>
                       <span className="text-gray-600">Rework No:</span>
                       <span className="ml-2 font-semibold">{selectedRework.rework_no}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Rework By:</span>
+                      <span className="ml-2 font-semibold">{selectedRework.rework_by_username || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -770,7 +849,7 @@ const ReworkBatchPage = () => {
                     <p className="text-base">{detailRework.rework_date ? new Date(detailRework.rework_date).toLocaleString() : '-'}</p>
                   </div>
                   <div>
-                    <label className="text-sm text-gray-600">Reworked By</label>
+                    <label className="text-sm text-gray-600">Rework By</label>
                     <p className="text-base">{detailRework.rework_by_username || '-'}</p>
                   </div>
                   <div>
@@ -804,7 +883,7 @@ const ReworkBatchPage = () => {
                   </div>
                   <div className="col-span-2">
                     <label className="text-sm text-gray-600">Product</label>
-                    <p className="text-base font-semibold">{detailRework.product_name}</p>
+                    <p className="text-base font-semibold">{formatProductWithUnit(detailRework.product_name, detailRework.unit_name)}</p>
                     <p className="text-sm text-gray-500">{detailRework.product_code}</p>
                   </div>
                 </div>

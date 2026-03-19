@@ -27,6 +27,13 @@ export const batchTransferService = {
     return response.data.data;
   },
 
+  getById: async (transferId: number): Promise<BatchTransferWithDetails> => {
+    const response = await api.get<ApiResponse<BatchTransferWithDetails>>(
+      `/batch-transfers/${transferId}`
+    );
+    return response.data.data;
+  },
+
   create: async (
     data: BatchTransferCreateRequest
   ): Promise<BatchTransferWithDetails> => {

@@ -14,6 +14,7 @@ export interface ProductionPlan {
 export interface ProductionPlanWithProduct extends ProductionPlan {
   product_code: string;
   product_name: string;
+  unit_name?: string | null;
 }
 
 export interface ProductionPlanCreateRequest {

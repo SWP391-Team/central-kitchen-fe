@@ -5,6 +5,7 @@ import { productService } from '@/api/services/productService';
 import { batchTransferService } from '@/api/services/batchTransferService';
 import {
   BatchStatusHistory,
+  ProducedBySuggestion,
   Product,
   ProductionPlanWithProduct,
   ProductionBatchWithDetails,
@@ -19,6 +20,7 @@ import {
 } from '@heroicons/react/24/outline';
 import PaginationControls from '@/components/PaginationControls';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ProductionBatchPage = () => {
   const { isAdmin, isCentralStaff } = useAuth();
@@ -33,6 +35,13 @@ const ProductionBatchPage = () => {
   const [activeTab, setActiveTab] = useState<'plans' | 'batches'>('plans');
   
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
+  const [showProduceModal, setShowProduceModal] = useState(false);
+  const [selectedPlanForProduce, setSelectedPlanForProduce] = useState<ProductionPlanWithProduct | null>(null);
+  const [previewBatchCode, setPreviewBatchCode] = useState('');
+  const [produceByQuery, setProduceByQuery] = useState('');
+  const [produceBySuggestions, setProduceBySuggestions] = useState<ProducedBySuggestion[]>([]);
+  const [selectedProducedById, setSelectedProducedById] = useState<number | null>(null);
+  const [produceSubmitting, setProduceSubmitting] = useState(false);
   const [selectedBatchForDelivery, setSelectedBatchForDelivery] = useState<ProductionBatchWithDetails | null>(null);
   const [deliveryTransferQty, setDeliveryTransferQty] = useState<number>(0);
   const [deliveryTransferDate, setDeliveryTransferDate] = useState<string>('');
@@ -209,12 +218,61 @@ const ProductionBatchPage = () => {
     }
   };
 
-  const handleCreateBatchDirectly = async (plan: ProductionPlanWithProduct) => {
+  const handleSearchProducedBy = async (keyword: string) => {
+    try {
+      const data = await productionBatchService.searchProducedBySuggestions(keyword);
+      setProduceBySuggestions(data);
+    } catch {
+      setProduceBySuggestions([]);
+    }
+  };
+
+  const handleOpenProduceModal = async (plan: ProductionPlanWithProduct) => {
+    setSelectedPlanForProduce(plan);
+    setShowProduceModal(true);
+    setSelectedProducedById(null);
+    setProduceByQuery('');
+    setProduceBySuggestions([]);
+
+    try {
+      const [nextCode, suggestions] = await Promise.all([
+        productionBatchService.getNextBatchCode(),
+        productionBatchService.searchProducedBySuggestions(''),
+      ]);
+      setPreviewBatchCode(nextCode);
+      setProduceBySuggestions(suggestions);
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to initialize produce modal', 'error');
+    }
+  };
+
+  const handleCloseProduceModal = () => {
+    setShowProduceModal(false);
+    setSelectedPlanForProduce(null);
+    setPreviewBatchCode('');
+    setProduceByQuery('');
+    setProduceBySuggestions([]);
+    setSelectedProducedById(null);
+  };
+
+  const handleConfirmProduce = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlanForProduce) {
+      return;
+    }
+
+    if (!selectedProducedById) {
+      showToast('Please select Produced By', 'error');
+      return;
+    }
+
     try {
       setError('');
+      setProduceSubmitting(true);
       await productionBatchService.createBatch({
-        plan_id: plan.plan_id,
-        product_id: plan.product_id,
+        plan_id: selectedPlanForProduce.plan_id,
+        product_id: selectedPlanForProduce.product_id,
+        produced_by: selectedProducedById,
       });
       
       await loadPlans();
@@ -223,11 +281,14 @@ const ProductionBatchPage = () => {
         await loadAllBatches();
       }
       
-      showToast('Batch created successfully!', 'success');
+      showToast(`Batch created successfully (${previewBatchCode || 'new code generated'})`, 'success');
+      handleCloseProduceModal();
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Failed to create batch';
       setError(errorMessage);
       showToast(errorMessage, 'error');
+    } finally {
+      setProduceSubmitting(false);
     }
   };
 
@@ -675,7 +736,7 @@ const ProductionBatchPage = () => {
                         {plan.plan_code}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        <div>{plan.product_name}</div>
+                        <div>{formatProductWithUnit(plan.product_name, plan.unit_name)}</div>
                         <div className="text-xs text-gray-500">{plan.product_code}</div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">
@@ -699,7 +760,7 @@ const ProductionBatchPage = () => {
                       <td className="px-4 py-3 text-sm">
                         {(isCentralStaff || isAdmin) && (plan.status === 'planned' || plan.status === 'in_production') && (
                           <button
-                            onClick={() => handleCreateBatchDirectly(plan)}
+                            onClick={() => handleOpenProduceModal(plan)}
                             className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold flex items-center gap-1"
                           >
                             <PlusIcon className="w-4 h-4" />
@@ -752,7 +813,7 @@ const ProductionBatchPage = () => {
                             {planInfo?.plan_code || '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900">
-                            <div>{batch.product_name}</div>
+                            <div>{formatProductWithUnit(batch.product_name, batch.unit_name)}</div>
                             <div className="text-xs text-gray-500">{batch.product_code}</div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-900 text-right font-semibold">
@@ -851,6 +912,89 @@ const ProductionBatchPage = () => {
         </>
       )}
 
+      {showProduceModal && selectedPlanForProduce && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">Produce Batch</h2>
+              <button
+                onClick={handleCloseProduceModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="bg-emerald-50 rounded-lg p-4 mb-4 text-sm space-y-1 border border-emerald-100">
+              <p>
+                This action will create a new batch for plan
+                <span className="font-semibold text-emerald-700"> {selectedPlanForProduce.plan_code}</span>
+                {' '}with batch code
+                <span className="font-semibold text-purple-700"> {previewBatchCode || '...'}</span>.
+              </p>
+              <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{formatProductWithUnit(selectedPlanForProduce.product_name, selectedPlanForProduce.unit_name)}</span></p>
+              <p><span className="text-gray-500">Product Code:</span> <span className="font-semibold">{selectedPlanForProduce.product_code}</span></p>
+            </div>
+
+            <form onSubmit={handleConfirmProduce} className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Produce By *</label>
+                <input
+                  type="text"
+                  value={produceByQuery}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setProduceByQuery(value);
+                    setSelectedProducedById(null);
+                    void handleSearchProducedBy(value);
+                  }}
+                  placeholder="Type username or user code..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                />
+
+                {produceBySuggestions.length > 0 && (
+                  <div className="mt-2 max-h-44 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+                    {produceBySuggestions.map((item) => (
+                      <button
+                        key={item.user_id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedProducedById(item.user_id);
+                          setProduceByQuery(`${item.username} (${item.user_code})`);
+                          setProduceBySuggestions([]);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="text-sm font-medium text-gray-900">{item.username}</div>
+                        <div className="text-xs text-gray-500">{item.user_code}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleCloseProduceModal}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={produceSubmitting}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {produceSubmitting ? 'Processing...' : 'Produce'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ── Delivery (Batch Transfer) Modal ── */}
 
       {showFinishModal && selectedBatchForFinish && (
@@ -871,7 +1015,8 @@ const ProductionBatchPage = () => {
 
             <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm space-y-1">
               <p><span className="text-gray-500">Batch:</span> <span className="font-semibold text-purple-700">{selectedBatchForFinish.batch_code}</span></p>
-              <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{selectedBatchForFinish.product_name || '-'}</span></p>
+              <p><span className="text-gray-500">Product:</span> <span className="font-semibold">{formatProductWithUnit(selectedBatchForFinish.product_name, selectedBatchForFinish.unit_name)}</span></p>
+              <p><span className="text-gray-500">Produced By:</span> <span className="font-semibold">{selectedBatchForFinish.produced_by_username || selectedBatchForFinish.produced_by || '-'}</span></p>
               <p><span className="text-gray-500">Shelf Life:</span> <span className="font-semibold text-indigo-700">{getShelfLifeDaysByBatch(selectedBatchForFinish) || '-'} days</span></p>
             </div>
 
@@ -979,7 +1124,7 @@ const ProductionBatchPage = () => {
                 </div>
                 <div>
                   <span className="text-gray-500">Product</span>
-                  <p className="font-semibold">{selectedBatchForDelivery.product_name}</p>
+                  <p className="font-semibold">{formatProductWithUnit(selectedBatchForDelivery.product_name, selectedBatchForDelivery.unit_name)}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">Good Quantity</span>
@@ -1118,7 +1263,7 @@ const ProductionBatchPage = () => {
                       </div>
                       <div>
                         <span className="text-sm text-gray-600">Product Name:</span>
-                        <p className="font-semibold">{selectedBatchForDetail.product_name || '-'}</p>
+                        <p className="font-semibold">{formatProductWithUnit(selectedBatchForDetail.product_name, selectedBatchForDetail.unit_name)}</p>
                       </div>
                       <div>
                         <span className="text-sm text-gray-600">Product Code:</span>
@@ -1147,6 +1292,10 @@ const ProductionBatchPage = () => {
                       <div>
                         <span className="text-sm text-gray-600">Created By:</span>
                         <p className="font-semibold">{selectedBatchForDetail.created_by_username || '-'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Produced By:</span>
+                        <p className="font-semibold">{selectedBatchForDetail.produced_by_username || selectedBatchForDetail.produced_by || '-'}</p>
                       </div>
                       <div>
                         <span className="text-sm text-gray-600">Created At:</span>

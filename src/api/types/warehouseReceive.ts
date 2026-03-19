@@ -18,6 +18,7 @@ export interface WarehouseReceiveWithDetails extends WarehouseReceive {
   warehouse_receive_code?: string;
   product_name?: string;
   product_code?: string;
+  unit_name?: string | null;
   location_name?: string;
   received_by_username?: string;
   created_by_username?: string;
@@ -27,4 +28,11 @@ export interface WarehouseReceiveCreateRequest {
   batch_transfer_id: number;
   received_qty: number;
   received_date: string;
+  received_by: number;
+}
+
+export interface ReceivedBySuggestion {
+  user_id: number;
+  user_code: string;
+  username: string;
 }

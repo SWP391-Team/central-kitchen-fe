@@ -3,6 +3,7 @@ import LoginPage from '@/pages/Authentication/LoginPage'
 import MainLayout from '@/layouts/MainLayout'
 import DashboardPage from '@/pages/Dashboard/DashboardPage'
 import ProductManagement from '@/pages/Inventory/ProductManagement'
+import UnitManagement from '@/pages/Inventory/UnitManagement'
 import ProductionPlanPage from '@/pages/ProductionPlan/ProductionPlanPage'
 import ProductionBatchPage from '@/pages/ProductionBatch/ProductionBatchPage'
 import BatchTransferPage from '@/pages/BatchTransfer/BatchTransferPage'
@@ -50,6 +51,11 @@ const AppRouter = () => {
         <Route 
           path="/products" 
           element={<ProtectedRoute allowedRoles={[1, 2]}><ProductManagement /></ProtectedRoute>} 
+        />
+
+        <Route
+          path="/units"
+          element={<ProtectedRoute allowedRoles={[1, 2]}><UnitManagement /></ProtectedRoute>}
         />
         
         {/* Production Plan - Admin, Central_Staff */}

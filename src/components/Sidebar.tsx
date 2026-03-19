@@ -15,6 +15,7 @@ import {
   Squares2X2Icon,
   TruckIcon,
   UsersIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline';
 
 interface MenuItem {
@@ -65,7 +66,7 @@ const menuSections: MenuSection[] = [
       {
         name: 'Rework Batch',
         path: '/rework-batch',
-        icon: Squares2X2Icon,
+        icon: WrenchScrewdriverIcon,
         roles: [1, 2],
       },
     ],
@@ -112,6 +113,12 @@ const menuSections: MenuSection[] = [
         name: 'Product Management',
         path: '/products',
         icon: ArchiveBoxIcon,
+        roles: [1, 2],
+      },
+      {
+        name: 'Unit Management',
+        path: '/units',
+        icon: Squares2X2Icon,
         roles: [1, 2],
       },
       {

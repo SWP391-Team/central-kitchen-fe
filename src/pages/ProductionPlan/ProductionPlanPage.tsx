@@ -6,6 +6,7 @@ import { ProductionPlanWithProduct, ProductionPlanCreateRequest, Product, Produc
 import { useToast } from '@/contexts/ToastContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { MagnifyingGlassIcon, PlusIcon, XCircleIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ProductionPlanPage = () => {
   const [plans, setPlans] = useState<ProductionPlanWithProduct[]>([]);
@@ -404,7 +405,8 @@ const ProductionPlanPage = () => {
                       {plan.plan_code}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {plan.product_name} ({plan.product_code})
+                      <div>{formatProductWithUnit(plan.product_name, plan.unit_name)}</div>
+                      <div className="text-xs text-gray-500">{plan.product_code}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
                       {plan.planned_qty}
@@ -562,7 +564,7 @@ const ProductionPlanPage = () => {
                     <option value={0}>Select a product</option>
                     {products.map((product) => (
                       <option key={product.product_id} value={product.product_id}>
-                        {product.product_name} ({product.product_code})
+                        {formatProductWithUnit(product.product_name, product.unit_name)} ({product.product_code})
                       </option>
                     ))}
                   </select>
@@ -655,7 +657,7 @@ const ProductionPlanPage = () => {
                     <div>
                       <p className="text-sm text-gray-600">Product</p>
                       <p className="text-base font-semibold text-gray-900">
-                        {selectedPlanForDetail.product_name}
+                        {formatProductWithUnit(selectedPlanForDetail.product_name, selectedPlanForDetail.unit_name)}
                       </p>
                       <p className="text-sm text-gray-500">{selectedPlanForDetail.product_code}</p>
                     </div>

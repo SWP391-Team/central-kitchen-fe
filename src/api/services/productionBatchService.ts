@@ -1,6 +1,7 @@
 import api from '../axiosConfig';
 import { 
   BatchStatusHistory,
+  ProducedBySuggestion,
   ProductionBatchCreateRequest,
   ProductionBatchFinishRequest, 
   ProduceBatchResponse,
@@ -9,6 +10,18 @@ import {
 } from '../types';
 
 export const productionBatchService = {
+  getNextBatchCode: async (): Promise<string> => {
+    const response = await api.get<ApiResponse<{ batch_code: string }>>('/production-batches/next-code');
+    return response.data.data.batch_code;
+  },
+
+  searchProducedBySuggestions: async (keyword: string): Promise<ProducedBySuggestion[]> => {
+    const response = await api.get<ApiResponse<ProducedBySuggestion[]>>(
+      `/production-batches/produced-by-suggestions?q=${encodeURIComponent(keyword)}`
+    );
+    return response.data.data;
+  },
+
   createBatch: async (data: ProductionBatchCreateRequest): Promise<ProduceBatchResponse> => {
     const response = await api.post<ApiResponse<ProduceBatchResponse>>('/production-batches', data);
     return response.data.data;

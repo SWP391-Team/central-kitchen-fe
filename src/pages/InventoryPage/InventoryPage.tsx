@@ -13,6 +13,7 @@ import {
 } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
 import PaginationControls from '@/components/PaginationControls';
+import { formatProductWithUnit } from '@/utils/productDisplay';
 
 type BatchSortBy = 'updated_at' | 'qty_available' | 'qty_on_hand' | 'location_name';
 type AvailabilityFilter = 'all' | 'available' | 'out_of_stock' | 'reserved';
@@ -50,12 +51,15 @@ const InventoryPage = () => {
   const [transactionsCurrentPage, setTransactionsCurrentPage] = useState(1);
   const pageSize = 10;
 
-  const [batchTransfers, setBatchTransfers] = useState<BatchTransferWithDetails[]>([]);
-  const [productionBatches, setProductionBatches] = useState<ProductionBatchWithDetails[]>([]);
-  const [warehouseReceives, setWarehouseReceives] = useState<WarehouseReceiveWithDetails[]>([]);
-
   const [showTransactionDetailModal, setShowTransactionDetailModal] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<InventoryTransaction | null>(null);
+  const [loadingRelatedDetail, setLoadingRelatedDetail] = useState(false);
+  const [selectedBatchTransfer, setSelectedBatchTransfer] =
+    useState<BatchTransferWithDetails | null>(null);
+  const [selectedProductionBatch, setSelectedProductionBatch] =
+    useState<ProductionBatchWithDetails | null>(null);
+  const [selectedWarehouseReceive, setSelectedWarehouseReceive] =
+    useState<WarehouseReceiveWithDetails | null>(null);
 
   useEffect(() => {
     if (activeTab === 'inventory-batches') {
@@ -104,31 +108,42 @@ const InventoryPage = () => {
   const loadTransactions = async () => {
     try {
       setLoadingTransactions(true);
-
-      const [transactionsResult, transfersResult, productionBatchesResult, warehouseReceivesResult] =
-        await Promise.allSettled([
-          inventoryService.getTransactions(),
-          batchTransferService.getAll(),
-          productionBatchService.getAllBatches(),
-          warehouseReceiveService.getAll(),
-        ]);
-
-      if (transactionsResult.status !== 'fulfilled') {
-        throw new Error('Failed to load inventory transactions');
-      }
-
-      setTransactions(transactionsResult.value);
-      setBatchTransfers(transfersResult.status === 'fulfilled' ? transfersResult.value : []);
-      setProductionBatches(
-        productionBatchesResult.status === 'fulfilled' ? productionBatchesResult.value : []
-      );
-      setWarehouseReceives(
-        warehouseReceivesResult.status === 'fulfilled' ? warehouseReceivesResult.value : []
-      );
+      const data = await inventoryService.getTransactions();
+      setTransactions(data);
     } catch {
       showToast('Failed to load inventory transactions', 'error');
     } finally {
       setLoadingTransactions(false);
+    }
+  };
+
+  const handleOpenTransactionDetail = async (tx: InventoryTransaction) => {
+    setSelectedTransaction(tx);
+    setSelectedBatchTransfer(null);
+    setSelectedProductionBatch(null);
+    setSelectedWarehouseReceive(null);
+    setShowTransactionDetailModal(true);
+
+    if (!['batch_transfer', 'production_batch', 'warehouse_receive'].includes(tx.reference_type)) {
+      return;
+    }
+
+    setLoadingRelatedDetail(true);
+    try {
+      if (tx.reference_type === 'batch_transfer') {
+        const detail = await batchTransferService.getById(tx.reference_id);
+        setSelectedBatchTransfer(detail);
+      } else if (tx.reference_type === 'production_batch') {
+        const detail = await productionBatchService.getBatchById(tx.reference_id);
+        setSelectedProductionBatch(detail);
+      } else if (tx.reference_type === 'warehouse_receive') {
+        const detail = await warehouseReceiveService.getById(tx.reference_id);
+        setSelectedWarehouseReceive(detail);
+      }
+    } catch {
+      showToast('Failed to load related reference details', 'error');
+    } finally {
+      setLoadingRelatedDetail(false);
     }
   };
 
@@ -176,11 +191,10 @@ const InventoryPage = () => {
     return new Date(value).toLocaleString();
   };
 
-  const batchTransferMap = new Map(batchTransfers.map((item) => [item.batch_transfer_id, item]));
-  const productionBatchMap = new Map(productionBatches.map((item) => [item.batch_id, item]));
-  const warehouseReceiveMap = new Map(
-    warehouseReceives.map((item) => [item.warehouse_receive_id, item])
-  );
+  const formatDate = (value?: string | null) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleDateString();
+  };
 
   const batchLocationOptions = Array.from(
     new Map(
@@ -255,13 +269,6 @@ const InventoryPage = () => {
 
   const filteredTransactions = [...transactions]
     .filter((tx) => {
-      const relatedBatchTransfer =
-        tx.reference_type === 'batch_transfer' ? batchTransferMap.get(tx.reference_id) : undefined;
-      const relatedWarehouseReceive =
-        tx.reference_type === 'warehouse_receive'
-          ? warehouseReceiveMap.get(tx.reference_id)
-          : undefined;
-
       const keyword = transactionSearch.trim().toLowerCase();
       if (keyword) {
         const matched =
@@ -271,9 +278,7 @@ const InventoryPage = () => {
           (tx.product_code || '').toLowerCase().includes(keyword) ||
           (tx.batch_code || '').toLowerCase().includes(keyword) ||
           tx.reference_type.toLowerCase().includes(keyword) ||
-          String(tx.reference_id).includes(keyword) ||
-          (relatedBatchTransfer?.batch_transfer_code || '').toLowerCase().includes(keyword) ||
-          (relatedWarehouseReceive?.warehouse_receive_code || '').toLowerCase().includes(keyword);
+          String(tx.reference_id).includes(keyword);
 
         if (!matched) return false;
       }
@@ -330,19 +335,6 @@ const InventoryPage = () => {
     (safeTransactionsCurrentPage - 1) * pageSize,
     safeTransactionsCurrentPage * pageSize
   );
-
-  const selectedBatchTransfer =
-    selectedTransaction?.reference_type === 'batch_transfer'
-      ? batchTransferMap.get(selectedTransaction.reference_id) || null
-      : null;
-  const selectedProductionBatch =
-    selectedTransaction?.reference_type === 'production_batch'
-      ? productionBatchMap.get(selectedTransaction.reference_id) || null
-      : null;
-  const selectedWarehouseReceive =
-    selectedTransaction?.reference_type === 'warehouse_receive'
-      ? warehouseReceiveMap.get(selectedTransaction.reference_id) || null
-      : null;
 
   return (
     <div className="p-6">
@@ -447,6 +439,8 @@ const InventoryPage = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Production Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expired Date</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty On Hand</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Reserved</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Qty Available</th>
@@ -460,12 +454,14 @@ const InventoryPage = () => {
                         {bi.location_name || bi.location_id}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        <div>{bi.product_name}</div>
+                        <div>{formatProductWithUnit(bi.product_name, bi.unit_name)}</div>
                         <div className="text-xs text-gray-500">{bi.product_code}</div>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-purple-700">
                         {bi.batch_code || bi.batch_id}
                       </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{formatDate(bi.production_date)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{formatDate(bi.expired_date)}</td>
                       <td className="px-4 py-3 text-sm text-right font-semibold">{bi.qty_on_hand}</td>
                       <td className="px-4 py-3 text-sm text-right text-yellow-600 font-semibold">{bi.qty_reserved}</td>
                       <td className={`px-4 py-3 text-sm text-right font-semibold ${bi.qty_available > 0 ? 'text-green-700' : 'text-red-600'}`}>
@@ -582,22 +578,13 @@ const InventoryPage = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedTransactions.map((tx) => {
-                    const relatedTransfer =
-                      tx.reference_type === 'batch_transfer'
-                        ? batchTransferMap.get(tx.reference_id)
-                        : null;
-                    const relatedReceive =
-                      tx.reference_type === 'warehouse_receive'
-                        ? warehouseReceiveMap.get(tx.reference_id)
-                        : null;
-
                     return (
                       <tr key={tx.inventory_transaction_id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-blue-700">
                           {tx.location_name || tx.location_id}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
-                          <div>{tx.product_name}</div>
+                          <div>{formatProductWithUnit(tx.product_name, tx.unit_name)}</div>
                           <div className="text-xs text-gray-500">{tx.product_code}</div>
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-purple-700">
@@ -610,24 +597,11 @@ const InventoryPage = () => {
                         <td className="px-4 py-3 text-sm text-gray-600">
                           <div className="mb-1">{getReferenceTypeBadge(tx.reference_type)}</div>
                           <div className="text-xs text-gray-400">#{tx.reference_id}</div>
-                          {relatedTransfer?.batch_transfer_code && (
-                            <div className="text-xs font-mono text-indigo-600">
-                              {relatedTransfer.batch_transfer_code}
-                            </div>
-                          )}
-                          {relatedReceive?.warehouse_receive_code && (
-                            <div className="text-xs font-mono text-teal-600">
-                              {relatedReceive.warehouse_receive_code}
-                            </div>
-                          )}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">{formatDateTime(tx.created_at)}</td>
                         <td className="px-4 py-3 text-sm">
                           <button
-                            onClick={() => {
-                              setSelectedTransaction(tx);
-                              setShowTransactionDetailModal(true);
-                            }}
+                            onClick={() => void handleOpenTransactionDetail(tx)}
                             className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
                             title="View Details"
                           >
@@ -662,6 +636,9 @@ const InventoryPage = () => {
                 onClick={() => {
                   setShowTransactionDetailModal(false);
                   setSelectedTransaction(null);
+                  setSelectedBatchTransfer(null);
+                  setSelectedProductionBatch(null);
+                  setSelectedWarehouseReceive(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -670,6 +647,12 @@ const InventoryPage = () => {
             </div>
 
             <div className="overflow-y-auto flex-1 px-6 py-4 space-y-6">
+              {loadingRelatedDetail && (
+                <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                  Loading related reference details...
+                </div>
+              )}
+
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 border-b pb-2">
                   Transaction Information
@@ -687,7 +670,7 @@ const InventoryPage = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Product</span>
-                    <p className="font-semibold">{selectedTransaction.product_name || '-'}</p>
+                    <p className="font-semibold">{formatProductWithUnit(selectedTransaction.product_name, selectedTransaction.unit_name)}</p>
                   </div>
                   <div>
                     <span className="text-gray-500">Product Code</span>
@@ -750,7 +733,7 @@ const InventoryPage = () => {
                     </div>
                     <div>
                       <span className="text-gray-500">Product</span>
-                      <p className="font-semibold">{selectedBatchTransfer.product_name || '-'}</p>
+                      <p className="font-semibold">{formatProductWithUnit(selectedBatchTransfer.product_name, selectedBatchTransfer.unit_name)}</p>
                     </div>
                     <div>
                       <span className="text-gray-500">Product Code</span>
@@ -812,7 +795,7 @@ const InventoryPage = () => {
                     </div>
                     <div>
                       <span className="text-gray-500">Product</span>
-                      <p className="font-semibold">{selectedProductionBatch.product_name || '-'}</p>
+                      <p className="font-semibold">{formatProductWithUnit(selectedProductionBatch.product_name, selectedProductionBatch.unit_name)}</p>
                     </div>
                     <div>
                       <span className="text-gray-500">Product Code</span>
@@ -878,7 +861,7 @@ const InventoryPage = () => {
                     </div>
                     <div>
                       <span className="text-gray-500">Product</span>
-                      <p className="font-semibold">{selectedWarehouseReceive.product_name || '-'}</p>
+                      <p className="font-semibold">{formatProductWithUnit(selectedWarehouseReceive.product_name, selectedWarehouseReceive.unit_name)}</p>
                     </div>
                     <div>
                       <span className="text-gray-500">Product Code</span>
@@ -929,6 +912,9 @@ const InventoryPage = () => {
                 onClick={() => {
                   setShowTransactionDetailModal(false);
                   setSelectedTransaction(null);
+                  setSelectedBatchTransfer(null);
+                  setSelectedProductionBatch(null);
+                  setSelectedWarehouseReceive(null);
                 }}
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg"
               >
