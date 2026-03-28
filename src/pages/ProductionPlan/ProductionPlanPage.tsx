@@ -4,6 +4,7 @@ import { productionBatchService } from '@/api/services/productionBatchService';
 import { productService } from '@/api/services/productService';
 import { ProductionPlanWithProduct, ProductionPlanCreateRequest, Product, ProductionBatchWithDetails } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { MagnifyingGlassIcon, PlusIcon, XCircleIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { formatProductWithUnit } from '@/utils/productDisplay';
@@ -37,6 +38,7 @@ const ProductionPlanPage = () => {
 
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
+  const { isCentralStaff } = useAuth();
 
   // Debounce search term
   useEffect(() => {
@@ -293,13 +295,15 @@ const ProductionPlanPage = () => {
           />
         </div>
 
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors sm:ml-auto"
-        >
-          <PlusIcon className="h-5 w-5" />
-          Create Production Plan
-        </button>
+        {isCentralStaff && (
+          <button
+            onClick={openCreateModal}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors sm:ml-auto"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Create Production Plan
+          </button>
+        )}
       </div>
 
       {/* Filters and Sort */}
@@ -441,7 +445,7 @@ const ProductionPlanPage = () => {
                         >
                           <EyeIcon className="h-5 w-5" />
                         </button>
-                        {plan.status === 'draft' && (
+                        {isCentralStaff && plan.status === 'draft' && (
                           <button
                             onClick={() => handleRelease(plan.plan_id, plan.plan_code)}
                             className="text-green-600 hover:text-green-800 flex items-center gap-1"
@@ -461,7 +465,7 @@ const ProductionPlanPage = () => {
                             Cancel
                           </button>
                         )}
-                        {plan.status === 'in_production' && (
+                        {isCentralStaff && plan.status === 'in_production' && (
                           <button
                             onClick={() => handleClose(plan.plan_id, plan.plan_code)}
                             className="text-blue-600 hover:text-blue-800 flex items-center gap-1"

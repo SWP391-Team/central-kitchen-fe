@@ -10,7 +10,7 @@ import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const WarehouseReceivePage = () => {
-  const { isAdmin, isCentralStaff, isStoreStaff } = useAuth();
+  const { isCentralStaff, isStoreStaff } = useAuth();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
 
@@ -383,7 +383,7 @@ const WarehouseReceivePage = () => {
                         <td className="px-4 py-3 text-sm">{getTransferStatusBadge(bt.status)}</td>
                         <td className="px-4 py-3 text-sm">
                           <div className="flex gap-2">
-                            {(isAdmin || isCentralStaff || isStoreStaff) && remaining > 0 && (
+                            {(isCentralStaff || isStoreStaff) && remaining > 0 && (
                               <button
                                 onClick={() => handleOpenReceiveModal(bt)}
                                 className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold flex items-center gap-1"
@@ -393,7 +393,7 @@ const WarehouseReceivePage = () => {
                               </button>
                             )}
                             {/* Rule 8: Complete Receive */}
-                            {(isAdmin || isCentralStaff || isStoreStaff) && canCompleteReceive && alreadyReceived > 0 && (
+                            {(isCentralStaff || isStoreStaff) && canCompleteReceive && alreadyReceived > 0 && (
                               <button
                                 onClick={() => handleCompleteReceive(bt)}
                                 className="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-xs font-semibold"

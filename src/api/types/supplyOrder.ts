@@ -7,7 +7,7 @@ export type SupplyOrderStatus =
   | 'Delivered'
   | 'Closed';
 
-export type SupplyOrderItemStatus = 'Draft' | 'Approved' | 'Rejected';
+export type SupplyOrderItemStatus = 'Draft' | 'Pending' | 'Approved' | 'Rejected';
 
 export interface SupplyOrder {
   supply_order_id: number;
@@ -33,6 +33,7 @@ export interface SupplyOrder {
   location_type?: string;
   created_by_username?: string;
   approved_by_username?: string;
+  closed_by_username?: string;
   item_count?: number;
 }
 
@@ -74,6 +75,7 @@ export interface ApproveSupplyOrderRequest {
 
 export interface CreateSupplyOrderDeliveryRequest {
   batch_id: number;
+  location_id: number;
   transfer_qty: number;
   transfer_date: string;
 }

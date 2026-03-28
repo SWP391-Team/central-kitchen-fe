@@ -3,10 +3,12 @@ import { productService } from '@/api/services/productService';
 import { unitService } from '@/api/services/unitService';
 import { Product, ProductCreateRequest, ProductUpdateRequest, Unit } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { PencilIcon, MagnifyingGlassIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 const ProductManagement = () => {
+  const { isCentralStaff } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,6 +23,7 @@ const ProductManagement = () => {
   });
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
+  const canManage = isCentralStaff;
 
   const loadProducts = async () => {
     try {
@@ -85,6 +88,8 @@ const ProductManagement = () => {
   };
 
   const openModal = (product?: Product) => {
+    if (!canManage) return;
+
     if (product) {
       setEditingProduct(product);
       setFormData({
@@ -154,6 +159,8 @@ const ProductManagement = () => {
   };
 
   const handleToggleActive = async (product: Product) => {
+    if (!canManage) return;
+
     const action = product.is_active ? 'deactivate' : 'activate';
     const accepted = await confirm({
       title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} Product`,
@@ -178,12 +185,14 @@ const ProductManagement = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Product Management</h2>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          Add Product
-        </button>
+        {canManage && (
+          <button
+            onClick={() => openModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            Add Product
+          </button>
+        )}
       </div>
 
       {/* Search and Filter */}
@@ -307,24 +316,30 @@ const ProductManagement = () => {
                     {product.updated_by_username || product.updated_by || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                      title="Edit"
-                    >
-                      <PencilIcon className="h-5 w-5 inline" />
-                    </button>
-                    <button
-                      onClick={() => handleToggleActive(product)}
-                      className={product.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
-                      title={product.is_active ? 'Deactivate' : 'Activate'}
-                    >
-                      {product.is_active ? (
-                        <XCircleIcon className="h-5 w-5 inline" />
-                      ) : (
-                        <CheckCircleIcon className="h-5 w-5 inline" />
-                      )}
-                    </button>
+                    {canManage ? (
+                      <>
+                        <button
+                          onClick={() => openModal(product)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                          title="Edit"
+                        >
+                          <PencilIcon className="h-5 w-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(product)}
+                          className={product.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
+                          title={product.is_active ? 'Deactivate' : 'Activate'}
+                        >
+                          {product.is_active ? (
+                            <XCircleIcon className="h-5 w-5 inline" />
+                          ) : (
+                            <CheckCircleIcon className="h-5 w-5 inline" />
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
                   </td>
                 </tr>
               ))}

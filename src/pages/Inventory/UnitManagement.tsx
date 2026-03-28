@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { unitService } from '@/api/services/unitService';
 import { Unit, UnitCreateRequest, UnitUpdateRequest } from '@/api/types';
 import { useToast } from '@/contexts/ToastContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { CheckCircleIcon, MagnifyingGlassIcon, PencilIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
 const UnitManagement = () => {
+  const { isCentralStaff } = useAuth();
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,6 +20,7 @@ const UnitManagement = () => {
 
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
+  const canManage = isCentralStaff;
 
   const loadUnits = async (search = searchTerm, status = statusFilter) => {
     try {
@@ -41,6 +44,10 @@ const UnitManagement = () => {
   }, [searchTerm, statusFilter]);
 
   const openModal = (unit?: Unit) => {
+    if (!canManage) {
+      return;
+    }
+
     if (unit) {
       setEditingUnit(unit);
       setFormData({ unit_name: unit.unit_name });
@@ -87,6 +94,10 @@ const UnitManagement = () => {
   };
 
   const handleToggleActive = async (unit: Unit) => {
+    if (!canManage) {
+      return;
+    }
+
     const action = unit.is_active ? 'deactivate' : 'activate';
     const accepted = await confirm({
       title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} Unit`,
@@ -113,12 +124,14 @@ const UnitManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Unit Management</h2>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          Add Unit
-        </button>
+        {canManage && (
+          <button
+            onClick={() => openModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            Add Unit
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow p-4">
@@ -202,24 +215,30 @@ const UnitManagement = () => {
                     {unit.updated_by_username || unit.updated_by || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => openModal(unit)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                      title="Edit"
-                    >
-                      <PencilIcon className="h-5 w-5 inline" />
-                    </button>
-                    <button
-                      onClick={() => handleToggleActive(unit)}
-                      className={unit.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
-                      title={unit.is_active ? 'Deactivate' : 'Activate'}
-                    >
-                      {unit.is_active ? (
-                        <XCircleIcon className="h-5 w-5 inline" />
-                      ) : (
-                        <CheckCircleIcon className="h-5 w-5 inline" />
-                      )}
-                    </button>
+                    {canManage ? (
+                      <>
+                        <button
+                          onClick={() => openModal(unit)}
+                          className="text-blue-600 hover:text-blue-900 mr-4"
+                          title="Edit"
+                        >
+                          <PencilIcon className="h-5 w-5 inline" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(unit)}
+                          className={unit.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'}
+                          title={unit.is_active ? 'Deactivate' : 'Activate'}
+                        >
+                          {unit.is_active ? (
+                            <XCircleIcon className="h-5 w-5 inline" />
+                          ) : (
+                            <CheckCircleIcon className="h-5 w-5 inline" />
+                          )}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
                   </td>
                 </tr>
               ))}

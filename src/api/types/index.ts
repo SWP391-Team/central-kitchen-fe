@@ -12,3 +12,4 @@ export * from './supplyOrder';
 export * from './warehouseReceive';
 export * from './inventory';
 export * from './auditLog';
+export * from './reserve';

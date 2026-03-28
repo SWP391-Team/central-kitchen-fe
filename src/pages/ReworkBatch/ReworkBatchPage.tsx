@@ -16,7 +16,7 @@ import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ReworkBatchPage = () => {
-  const { isAdmin, isCentralStaff } = useAuth();
+  const { isCentralStaff } = useAuth();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
 
@@ -436,7 +436,7 @@ const ReworkBatchPage = () => {
                       <td className="px-4 py-3 text-sm text-right">{batch.produced_qty || '-'}</td>
                       <td className="px-4 py-3 text-sm">{getBatchStatusBadge(batch.status)}</td>
                       <td className="px-4 py-3 text-sm">
-                        {(isCentralStaff || isAdmin) && batch.status === 'rework_required' && (
+                        {isCentralStaff && batch.status === 'rework_required' && (
                           <button
                             onClick={() => handleOpenStartReworkModal(batch)}
                             className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs font-semibold flex items-center gap-1"
@@ -523,7 +523,7 @@ const ReworkBatchPage = () => {
                           >
                             <EyeIcon className="h-5 w-5" />
                           </button>
-                          {(isCentralStaff || isAdmin) && (
+                          {isCentralStaff && (
                             <>
                               {rework.status === 'Reworking' && (
                                 <button

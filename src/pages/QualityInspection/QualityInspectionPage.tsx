@@ -17,7 +17,7 @@ import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const QualityInspectionPage = () => {
-  const { isAdmin, isCentralStaff } = useAuth();
+  const { isCentralStaff } = useAuth();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
   
@@ -473,7 +473,8 @@ const QualityInspectionPage = () => {
         inspection_mode: mode,
         inspected_qty: sourceQty,
         passed_qty: 0,
-        failed_qty: 0
+        failed_qty: 0,
+        inspection_result: 'Pass'
       });
     } else {
       setFinishData({
@@ -481,7 +482,8 @@ const QualityInspectionPage = () => {
         inspection_mode: mode,
         inspected_qty: 0,
         passed_qty: 0,
-        failed_qty: 0
+        failed_qty: 0,
+        inspection_result: 'Pass'
       });
     }
   };
@@ -506,10 +508,16 @@ const QualityInspectionPage = () => {
 
   const handleFailedQtyChange = (qty: number) => {
     const passed = finishData.inspected_qty - qty;
+    const nextResult =
+      finishData.inspection_mode === 'full' && qty === 0
+        ? 'Pass'
+        : finishData.inspection_result;
+
     setFinishData({
       ...finishData,
       failed_qty: qty,
-      passed_qty: passed >= 0 ? passed : 0
+      passed_qty: passed >= 0 ? passed : 0,
+      inspection_result: nextResult,
     });
   };
 
@@ -541,6 +549,11 @@ const QualityInspectionPage = () => {
 
     if (finishData.inspection_mode === 'sampling' && finishData.failed_qty > 0 && finishData.inspection_result === 'Pass') {
       showToast('Cannot pass sampling inspection with failures', 'error');
+      return;
+    }
+
+    if (finishData.inspection_mode === 'full' && finishData.failed_qty === 0 && finishData.inspection_result !== 'Pass') {
+      showToast('Full inspection with failed quantity = 0 must have result Pass', 'error');
       return;
     }
 
@@ -748,7 +761,7 @@ const QualityInspectionPage = () => {
                       <td className="px-4 py-3 text-sm">{formatDate(batch.production_date)}</td>
                       <td className="px-4 py-3 text-sm">{getBatchStatusBadge(batch.status)}</td>
                       <td className="px-4 py-3 text-sm">
-                        {(isCentralStaff || isAdmin) && (
+                        {isCentralStaff && (
                           <div className="flex gap-2">
                             {batch.status === 'waiting_qc' && (
                               <button
@@ -763,7 +776,7 @@ const QualityInspectionPage = () => {
                             )}
                           </div>
                         )}
-                        {!(isCentralStaff || isAdmin) && (
+                        {!isCentralStaff && (
                           <span className="text-xs text-gray-400 italic">-</span>
                         )}
                       </td>
@@ -881,7 +894,11 @@ const QualityInspectionPage = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {inspections.map((inspection) => (
+                    {inspections.map((inspection) => {
+                      const inspectionSource = getSourceFromInspection(inspection);
+                      const isReworkSource = inspectionSource.startsWith('Rework');
+
+                      return (
                       <tr key={inspection.quality_inspection_id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-semibold text-blue-700">{inspection.quality_inspection_code}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-purple-700">{inspection.batch_code}</td>
@@ -891,9 +908,7 @@ const QualityInspectionPage = () => {
                           <span className="text-xs text-gray-500">{inspection.product_code}</span>
                         </td>
                         <td className="px-4 py-3 text-sm text-center">{inspection.inspection_no}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {getSourceFromInspection(inspection)}
-                        </td>
+                        <td className="px-4 py-3 text-sm">{inspectionSource}</td>
                         <td className="px-4 py-3 text-sm text-right font-medium">
                           {getSourceQtyFromInspection(inspection)}
                         </td>
@@ -915,7 +930,7 @@ const QualityInspectionPage = () => {
                               >
                                 <EyeIcon className="h-5 w-5" />
                               </button>
-                              {(isCentralStaff || isAdmin) && (
+                              {isCentralStaff && (
                                 <>
                                   {inspection.status === 'Inspecting' && (
                                     <button
@@ -927,7 +942,8 @@ const QualityInspectionPage = () => {
                                   )}
                                   {(inspection.status === 'Passed' || inspection.status === 'Failed') &&
                                    inspection.inspection_no === inspection.max_inspection_no &&
-                                   (inspection.batch_status === 'qc_failed' || inspection.batch_status === 'qc_passed' || inspection.batch_status === 'rework_required') && (
+                                   (inspection.batch_status === 'qc_failed' || inspection.batch_status === 'qc_passed' || inspection.batch_status === 'rework_required') &&
+                                   !isReworkSource && (
                                     <button
                                       onClick={() => handleUndoInspection(inspection)}
                                       className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-xs font-semibold"
@@ -970,7 +986,8 @@ const QualityInspectionPage = () => {
                             </div>
                           </td>
                         </tr>
-                    ))}
+                    );
+                  })}
                   </tbody>
                 </table>
               </div>
@@ -1254,6 +1271,7 @@ const QualityInspectionPage = () => {
                         value="Fail"
                         checked={finishData.inspection_result === 'Fail'}
                         onChange={() => setFinishData({ ...finishData, inspection_result: 'Fail' })}
+                        disabled={finishData.inspection_mode === 'full' && finishData.failed_qty === 0}
                         className="mr-2"
                       />
                       Fail
@@ -1261,6 +1279,9 @@ const QualityInspectionPage = () => {
                   </div>
                   {finishData.inspection_mode === 'sampling' && finishData.failed_qty > 0 && (
                     <p className="text-xs text-orange-600 mt-1">Cannot pass sampling inspection with failures</p>
+                  )}
+                  {finishData.inspection_mode === 'full' && finishData.failed_qty === 0 && (
+                    <p className="text-xs text-orange-600 mt-1">Full inspection with failed quantity = 0 must be Pass</p>
                   )}
                 </div>
 

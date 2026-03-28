@@ -16,7 +16,13 @@ import PaginationControls from '@/components/PaginationControls';
 import { formatProductWithUnit } from '@/utils/productDisplay';
 
 type BatchSortBy = 'updated_at' | 'qty_available' | 'qty_on_hand' | 'location_name';
-type AvailabilityFilter = 'all' | 'available' | 'out_of_stock' | 'reserved';
+type AvailabilityFilter =
+  | 'all'
+  | 'available'
+  | 'out_of_stock'
+  | 'reserved'
+  | 'expired_only'
+  | 'not_expired';
 type TransactionSortBy = 'created_at' | 'qty' | 'reference_type' | 'transaction_type';
 type TransactionReferenceFilter =
   | 'all'
@@ -196,6 +202,25 @@ const InventoryPage = () => {
     return new Date(value).toLocaleDateString();
   };
 
+  const getExpiryMeta = (value?: string | null) => {
+    if (!value) {
+      return { isExpired: false };
+    }
+
+    const expiry = new Date(value);
+    if (Number.isNaN(expiry.getTime())) {
+      return { isExpired: false };
+    }
+
+    expiry.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysToExpiry = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const isExpired = daysToExpiry < 0;
+
+    return { isExpired };
+  };
+
   const batchLocationOptions = Array.from(
     new Map(
       batchInventory.map((item) => [item.location_id, item.location_name || `Location #${item.location_id}`])
@@ -236,6 +261,15 @@ const InventoryPage = () => {
       }
 
       if (availabilityFilter === 'reserved' && item.qty_reserved <= 0) {
+        return false;
+      }
+
+      const expiryMeta = getExpiryMeta(item.expired_date);
+      if (availabilityFilter === 'expired_only' && !expiryMeta.isExpired) {
+        return false;
+      }
+
+      if (availabilityFilter === 'not_expired' && expiryMeta.isExpired) {
         return false;
       }
 
@@ -403,6 +437,8 @@ const InventoryPage = () => {
               <option value="available">Available &gt; 0</option>
               <option value="out_of_stock">Out of Stock</option>
               <option value="reserved">Has Reserved Qty</option>
+              <option value="expired_only">Expired Batches</option>
+              <option value="not_expired">Not Expired Batches</option>
             </select>
 
             <select
@@ -448,8 +484,14 @@ const InventoryPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedBatchInventory.map((bi) => (
-                    <tr key={bi.batch_inventory_id} className="hover:bg-gray-50">
+                  {paginatedBatchInventory.map((bi) => {
+                    const expiryMeta = getExpiryMeta(bi.expired_date);
+                    const rowClass = expiryMeta.isExpired
+                      ? 'bg-red-50 hover:bg-red-100'
+                      : 'hover:bg-gray-50';
+
+                    return (
+                    <tr key={bi.batch_inventory_id} className={rowClass}>
                       <td className="px-4 py-3 text-sm font-medium text-blue-700">
                         {bi.location_name || bi.location_id}
                       </td>
@@ -461,7 +503,16 @@ const InventoryPage = () => {
                         {bi.batch_code || bi.batch_id}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{formatDate(bi.production_date)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{formatDate(bi.expired_date)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <span>{formatDate(bi.expired_date)}</span>
+                          {expiryMeta.isExpired ? (
+                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                              Expired
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-right font-semibold">{bi.qty_on_hand}</td>
                       <td className="px-4 py-3 text-sm text-right text-yellow-600 font-semibold">{bi.qty_reserved}</td>
                       <td className={`px-4 py-3 text-sm text-right font-semibold ${bi.qty_available > 0 ? 'text-green-700' : 'text-red-600'}`}>
@@ -469,7 +520,8 @@ const InventoryPage = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{formatDateTime(bi.updated_at)}</td>
                     </tr>
-                  ))}
+                  );
+                })}
                 </tbody>
                 </table>
               </div>

@@ -15,6 +15,7 @@ import AuditLogPage from '@/pages/AuditLog/AuditLogPage'
 import WarehouseReceivePage from '@/pages/WarehouseReceive/WarehouseReceivePage'
 import InventoryPage from '@/pages/InventoryPage/InventoryPage'
 import SupplyOrderPage from '@/pages/SupplyOrder/SupplyOrderPage'
+import ReservePage from '@/pages/Reserve/ReservePage'
 import { useAuth } from '@/contexts/AuthContext'
 
 const ProtectedRoute = ({ 
@@ -103,6 +104,11 @@ const AppRouter = () => {
         <Route
           path="/supply-order"
           element={<ProtectedRoute allowedRoles={[1, 2, 3]}><SupplyOrderPage /></ProtectedRoute>}
+        />
+
+        <Route
+          path="/reserve"
+          element={<ProtectedRoute allowedRoles={[1, 2, 3]}><ReservePage /></ProtectedRoute>}
         />
         
         {/* User Management - Admin only */}

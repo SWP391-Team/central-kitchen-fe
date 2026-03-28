@@ -22,6 +22,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { supplyOrderService } from '@/api/services/supplyOrderService';
+import { reserveService } from '@/api/services/reserveService';
 import { productService } from '@/api/services/productService';
 import { locationService } from '@/api/services/locationService';
 import { formatProductWithUnit } from '@/utils/productDisplay';
@@ -47,6 +48,16 @@ type CreateItemRow = {
 type DeliveryDraft = {
   orderId: number;
   item: SupplyOrderItem;
+};
+
+type DeliveryBatchOption = CkInventoryRow & {
+  key: string;
+  allocatedRemainingQty: number;
+  unallocatedRemainingQty: number;
+  unallocatedBatchAvailQty: number;
+  unallocatedDeliverableQty: number;
+  maxDeliverableQty: number;
+  allocationSource: 'allocated' | 'unallocated' | 'mixed';
 };
 
 const formatDate = (value?: string | null) => {
@@ -95,6 +106,22 @@ const SupplyOrderPage = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | SupplyOrderStatus>('all');
   const [locationFilter, setLocationFilter] = useState<number | 'all'>('all');
 
+  const [ckInventorySearch, setCkInventorySearch] = useState('');
+  const [ckInventorySearchDebounce, setCkInventorySearchDebounce] = useState('');
+  const [ckInventoryAvailability, setCkInventoryAvailability] = useState<'all' | 'available' | 'empty'>('available');
+  const [ckInventorySort, setCkInventorySort] = useState<
+    | 'updated_desc'
+    | 'updated_asc'
+    | 'available_desc'
+    | 'available_asc'
+    | 'onhand_desc'
+    | 'onhand_asc'
+    | 'product_asc'
+    | 'product_desc'
+    | 'batch_asc'
+    | 'batch_desc'
+  >('updated_desc');
+
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<SupplyOrderDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -118,13 +145,20 @@ const SupplyOrderPage = () => {
   const [approveOrder, setApproveOrder] = useState<SupplyOrderDetailResponse | null>(null);
   const [approveQtyMap, setApproveQtyMap] = useState<Record<number, number>>({});
   const [approveNote, setApproveNote] = useState('');
+  const [approveInventoryMap, setApproveInventoryMap] = useState<Record<number, number>>({});
+  const [approveReserveMap, setApproveReserveMap] = useState<Record<number, number>>({});
   const [approving, setApproving] = useState(false);
 
   const [deliveryDraft, setDeliveryDraft] = useState<DeliveryDraft | null>(null);
-  const [deliveryBatchId, setDeliveryBatchId] = useState<number | ''>('');
+  const [deliveryBatchKey, setDeliveryBatchKey] = useState<string>('');
   const [deliveryQty, setDeliveryQty] = useState<number>(0);
   const [deliveryDate, setDeliveryDate] = useState('');
   const [delivering, setDelivering] = useState(false);
+  const [deliveryReserveRemaining, setDeliveryReserveRemaining] = useState(0);
+  const [deliveryAllocatedTotal, setDeliveryAllocatedTotal] = useState(0);
+  const [deliveryUnallocatedRemaining, setDeliveryUnallocatedRemaining] = useState(0);
+  const [deliveryRuleMode, setDeliveryRuleMode] = useState<'NONE' | 'PARTIAL' | 'FULL'>('NONE');
+  const [deliveryBatchAllocationMap, setDeliveryBatchAllocationMap] = useState<Record<string, number>>({});
 
   const [sendToCkSubmitting, setSendToCkSubmitting] = useState(false);
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -144,6 +178,11 @@ const SupplyOrderPage = () => {
     const timer = setTimeout(() => setSearchDebounce(search.trim()), 400);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setCkInventorySearchDebounce(ckInventorySearch.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [ckInventorySearch]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -380,8 +419,30 @@ const SupplyOrderPage = () => {
 
     try {
       setSendToCkSubmitting(true);
-      await supplyOrderService.sendToCk(selectedOrderDetail.order.supply_order_id);
+      const updatedOrder = await supplyOrderService.sendToCk(selectedOrderDetail.order.supply_order_id);
       showToast('Supply order sent to CK successfully', 'success');
+
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.supply_order_id === updatedOrder.supply_order_id
+            ? { ...order, ...updatedOrder, status: updatedOrder.status }
+            : order
+        )
+      );
+
+      setSelectedOrderDetail((prev) =>
+        prev && prev.order.supply_order_id === updatedOrder.supply_order_id
+          ? {
+              ...prev,
+              order: {
+                ...prev.order,
+                ...updatedOrder,
+                status: updatedOrder.status,
+              },
+            }
+          : prev
+      );
+
       await loadOrders();
       await loadDetail(selectedOrderDetail.order.supply_order_id);
     } catch (err: any) {
@@ -403,6 +464,35 @@ const SupplyOrderPage = () => {
       });
       setApproveQtyMap(map);
       setApproveNote(detail.order.note || '');
+
+      const productIds = Array.from(new Set(detail.items.map((item) => item.product_id)));
+
+      const inventoryRows = ckInventoryRows.length > 0
+        ? ckInventoryRows
+        : await supplyOrderService.getCkInventory();
+
+      const inventoryMap: Record<number, number> = {};
+      inventoryRows.forEach((row) => {
+        inventoryMap[row.product_id] = (inventoryMap[row.product_id] || 0) + (row.qty_available || 0);
+      });
+      setApproveInventoryMap(inventoryMap);
+
+      const reserveResults = await Promise.all(
+        productIds.map((productId) => reserveService.getReserveProducts({ product_id: productId }))
+      );
+
+      const reserveMap: Record<number, number> = {};
+      reserveResults.forEach((rows, index) => {
+        const productId = productIds[index];
+        reserveMap[productId] = rows.reduce((sum, row) => {
+          const approved = Number(row.approved_qty || 0);
+          const consumed = Number(row.consumed_qty || 0);
+          const released = Number(row.released_qty || 0);
+          return sum + Math.max(approved - consumed - released, 0);
+        }, 0);
+      });
+      setApproveReserveMap(reserveMap);
+
       setShowApproveModal(true);
     } catch {
       showToast('Failed to load order for approval', 'error');
@@ -455,20 +545,91 @@ const SupplyOrderPage = () => {
     });
     setDeliveryDate(localISO);
     setDeliveryQty(Math.max(item.remaining_qty || 0, 0));
-    setDeliveryBatchId('');
+    setDeliveryBatchKey('');
+    setDeliveryReserveRemaining(Math.max(item.remaining_qty || 0, 0));
+    setDeliveryAllocatedTotal(0);
+    setDeliveryUnallocatedRemaining(Math.max(item.remaining_qty || 0, 0));
+    setDeliveryRuleMode('NONE');
+    setDeliveryBatchAllocationMap({});
+
+    void (async () => {
+      try {
+        const [reserveProducts, reserveBatches] = await Promise.all([
+          reserveService.getReserveProducts({
+            supply_order_item_id: item.supply_order_item_id,
+          }),
+          reserveService.getReserveBatches({
+            supply_order_item_id: item.supply_order_item_id,
+          }),
+        ]);
+
+        const reserveProduct = reserveProducts.find(
+          (row) => row.supply_order_item_id === item.supply_order_item_id
+        );
+
+        const totalReserveRemaining = reserveProduct
+          ? Math.max(
+              Number(reserveProduct.approved_qty || 0) -
+                Number(reserveProduct.consumed_qty || 0) -
+                Number(reserveProduct.released_qty || 0),
+              0
+            )
+          : Math.max(item.remaining_qty || 0, 0);
+
+        const relevantBatches = reserveBatches.filter(
+          (row) => row.supply_order_item_id === item.supply_order_item_id
+        );
+
+        const allocationMap: Record<string, number> = {};
+        const allocatedRemaining = relevantBatches.reduce((sum, row) => {
+          const key = `${row.location_id}-${row.batch_id}`;
+          const remaining = Math.max(row.remaining_qty || 0, 0);
+          allocationMap[key] = remaining;
+          return sum + remaining;
+        }, 0);
+
+        const unallocatedRemaining = Math.max(totalReserveRemaining - allocatedRemaining, 0);
+
+        const mode: 'NONE' | 'PARTIAL' | 'FULL' =
+          reserveProduct?.allocation_level ||
+          (allocatedRemaining <= 0
+            ? 'NONE'
+            : allocatedRemaining >= totalReserveRemaining
+            ? 'FULL'
+            : 'PARTIAL');
+
+        setDeliveryReserveRemaining(totalReserveRemaining);
+        setDeliveryAllocatedTotal(allocatedRemaining);
+        setDeliveryUnallocatedRemaining(unallocatedRemaining);
+        setDeliveryRuleMode(mode);
+        setDeliveryBatchAllocationMap(allocationMap);
+      } catch {
+        setDeliveryReserveRemaining(Math.max(item.remaining_qty || 0, 0));
+        setDeliveryAllocatedTotal(0);
+        setDeliveryUnallocatedRemaining(Math.max(item.remaining_qty || 0, 0));
+        setDeliveryRuleMode('NONE');
+        setDeliveryBatchAllocationMap({});
+      }
+    })();
   };
 
   const handleSubmitDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveryDraft) return;
-    if (!deliveryBatchId) {
+    if (!deliveryBatchKey) {
       showToast('Please choose a batch', 'error');
       return;
     }
 
-    const remainingQty = deliveryDraft.item.remaining_qty || 0;
-    if (deliveryQty <= 0 || deliveryQty > remainingQty) {
-      showToast(`Transfer qty must be between 1 and ${remainingQty}`, 'error');
+    const selectedOption = deliveryBatchOptions.find((row) => row.key === deliveryBatchKey);
+    const maxAllowedQty = Math.max(selectedOption?.maxDeliverableQty || 0, 0);
+    if (deliveryQty <= 0 || deliveryQty > maxAllowedQty) {
+      showToast(`Transfer qty must be between 1 and ${maxAllowedQty}`, 'error');
+      return;
+    }
+
+    if (!selectedOption) {
+      showToast('Selected batch is no longer available', 'error');
       return;
     }
 
@@ -478,7 +639,8 @@ const SupplyOrderPage = () => {
         deliveryDraft.orderId,
         deliveryDraft.item.supply_order_item_id,
         {
-          batch_id: deliveryBatchId,
+          batch_id: selectedOption.batch_id,
+          location_id: selectedOption.location_id,
           transfer_qty: deliveryQty,
           transfer_date: new Date(deliveryDate).toISOString(),
         }
@@ -504,21 +666,151 @@ const SupplyOrderPage = () => {
 
   const isStoreDraft = isStoreStaff && selectedOrder?.status === 'Draft';
   const canApprove =
-    (isAdmin || isCentralStaff) &&
+    isCentralStaff &&
     selectedOrder?.status === 'Pending';
-  const canCloseOrder = !!selectedOrder && selectedOrder.status !== 'Closed';
+  const canCloseOrder = isCentralStaff && !!selectedOrder && selectedOrder.status !== 'Closed';
 
   const totalPages = Math.max(Math.ceil(totalOrders / limit), 1);
 
-  const deliveryBatchOptions = useMemo(() => {
+  const filteredSortedCkInventoryRows = useMemo(() => {
+    const keyword = ckInventorySearchDebounce.toLowerCase();
+
+    const filtered = ckInventoryRows.filter((row) => {
+      if (ckInventoryAvailability === 'available' && row.qty_available <= 0) return false;
+      if (ckInventoryAvailability === 'empty' && row.qty_available > 0) return false;
+
+      if (!keyword) return true;
+
+      return [
+        row.product_name,
+        row.product_code,
+        row.batch_code,
+        row.location_name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(keyword));
+    });
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (ckInventorySort) {
+        case 'updated_asc':
+          return new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        case 'available_desc':
+          return (b.qty_available || 0) - (a.qty_available || 0);
+        case 'available_asc':
+          return (a.qty_available || 0) - (b.qty_available || 0);
+        case 'onhand_desc':
+          return (b.qty_on_hand || 0) - (a.qty_on_hand || 0);
+        case 'onhand_asc':
+          return (a.qty_on_hand || 0) - (b.qty_on_hand || 0);
+        case 'product_desc':
+          return String(b.product_name || '').localeCompare(String(a.product_name || ''));
+        case 'product_asc':
+          return String(a.product_name || '').localeCompare(String(b.product_name || ''));
+        case 'batch_desc':
+          return String(b.batch_code || '').localeCompare(String(a.batch_code || ''));
+        case 'batch_asc':
+          return String(a.batch_code || '').localeCompare(String(b.batch_code || ''));
+        case 'updated_desc':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+
+    return sorted;
+  }, [ckInventoryRows, ckInventorySearchDebounce, ckInventoryAvailability, ckInventorySort]);
+
+  const deliveryBatchOptions = useMemo<DeliveryBatchOption[]>(() => {
     if (!deliveryDraft) return [];
 
-    return ckInventoryRows.filter(
-      (row) =>
-        row.product_id === deliveryDraft.item.product_id &&
-        row.qty_available > 0
-    );
-  }, [ckInventoryRows, deliveryDraft]);
+    const reserveRemaining = Math.max(deliveryReserveRemaining, 0);
+    const itemRemaining = Math.max(deliveryDraft.item.remaining_qty || 0, 0);
+    const allocatedTotal = Math.max(deliveryAllocatedTotal, 0);
+    const isFullAllocated = allocatedTotal > 0 && allocatedTotal >= reserveRemaining;
+
+    return ckInventoryRows
+      .filter(
+        (row) => row.product_id === deliveryDraft.item.product_id && row.qty_on_hand > 0
+      )
+      .map((row) => {
+        const key = `${row.location_id}-${row.batch_id}`;
+        const allocatedRemainingQty = Math.max(deliveryBatchAllocationMap[key] || 0, 0);
+        const unallocatedRemainingQty = Math.max(deliveryUnallocatedRemaining, 0);
+        const unallocatedBatchAvailQty = Math.max(row.qty_available, 0);
+        const unallocatedDeliverableQty = unallocatedBatchAvailQty;
+
+        let maxDeliverableQty = 0;
+        let allocationSource: 'allocated' | 'unallocated' | 'mixed' = 'unallocated';
+
+        if (isFullAllocated) {
+          maxDeliverableQty = Math.min(row.qty_on_hand, allocatedRemainingQty);
+          allocationSource = 'allocated';
+        } else if (allocatedRemainingQty > 0) {
+          maxDeliverableQty = Math.min(
+            row.qty_on_hand,
+            allocatedRemainingQty + unallocatedDeliverableQty
+          );
+          allocationSource = unallocatedDeliverableQty > 0 ? 'mixed' : 'allocated';
+        } else {
+          maxDeliverableQty = unallocatedDeliverableQty;
+          allocationSource = 'unallocated';
+        }
+
+        maxDeliverableQty = Math.min(maxDeliverableQty, itemRemaining);
+
+        return {
+          ...row,
+          key,
+          allocatedRemainingQty,
+          unallocatedRemainingQty,
+          unallocatedBatchAvailQty,
+          unallocatedDeliverableQty,
+          maxDeliverableQty,
+          allocationSource,
+        };
+      })
+      .filter((row) => row.maxDeliverableQty > 0);
+  }, [
+    ckInventoryRows,
+    deliveryDraft,
+    deliveryReserveRemaining,
+    deliveryAllocatedTotal,
+    deliveryUnallocatedRemaining,
+    deliveryBatchAllocationMap,
+  ]);
+
+  const selectedDeliveryBatchOption = useMemo(
+    () => deliveryBatchOptions.find((row) => row.key === deliveryBatchKey),
+    [deliveryBatchOptions, deliveryBatchKey]
+  );
+
+  const deliveryConsumePreview = useMemo(() => {
+    if (!selectedDeliveryBatchOption) {
+      return { allocatedFirst: 0, unallocatedSecond: 0 };
+    }
+
+    const requestedQty = Number.isFinite(deliveryQty) ? Math.max(deliveryQty, 0) : 0;
+    const cappedQty = Math.min(requestedQty, Math.max(selectedDeliveryBatchOption.maxDeliverableQty, 0));
+    const allocatedFirst = Math.min(cappedQty, Math.max(selectedDeliveryBatchOption.allocatedRemainingQty, 0));
+    const unallocatedSecond = Math.max(cappedQty - allocatedFirst, 0);
+
+    return { allocatedFirst, unallocatedSecond };
+  }, [selectedDeliveryBatchOption, deliveryQty]);
+
+  useEffect(() => {
+    if (!deliveryDraft || !deliveryBatchKey) return;
+
+    const selectedOption = deliveryBatchOptions.find((row) => row.key === deliveryBatchKey);
+    if (!selectedOption) {
+      setDeliveryBatchKey('');
+      return;
+    }
+
+    if (deliveryQty > selectedOption.maxDeliverableQty) {
+      setDeliveryQty(selectedOption.maxDeliverableQty);
+    }
+  }, [deliveryBatchOptions, deliveryBatchKey, deliveryDraft, deliveryQty]);
 
   const openCloseModal = () => {
     setCloseReason('Out of stock');
@@ -603,12 +895,51 @@ const SupplyOrderPage = () => {
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">CK Warehouse Inventory</h2>
-            <span className="text-sm text-gray-500">{ckInventoryRows.length} rows</span>
+            <span className="text-sm text-gray-500">{filteredSortedCkInventoryRows.length} rows</span>
+          </div>
+          <div className="px-4 py-3 border-b border-gray-200 flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={ckInventorySearch}
+                onChange={(e) => setCkInventorySearch(e.target.value)}
+                placeholder="Search product, batch, location..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <select
+              value={ckInventoryAvailability}
+              onChange={(e) => setCkInventoryAvailability(e.target.value as 'all' | 'available' | 'empty')}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="available">Available Only</option>
+              <option value="all">All</option>
+              <option value="empty">Out of Stock</option>
+            </select>
+
+            <select
+              value={ckInventorySort}
+              onChange={(e) => setCkInventorySort(e.target.value as typeof ckInventorySort)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="updated_desc">Sort: Updated (Newest)</option>
+              <option value="updated_asc">Sort: Updated (Oldest)</option>
+              <option value="available_desc">Sort: Available (High-Low)</option>
+              <option value="available_asc">Sort: Available (Low-High)</option>
+              <option value="onhand_desc">Sort: On Hand (High-Low)</option>
+              <option value="onhand_asc">Sort: On Hand (Low-High)</option>
+              <option value="product_asc">Sort: Product (A-Z)</option>
+              <option value="product_desc">Sort: Product (Z-A)</option>
+              <option value="batch_asc">Sort: Batch (A-Z)</option>
+              <option value="batch_desc">Sort: Batch (Z-A)</option>
+            </select>
           </div>
           {inventoryLoading ? (
             <div className="p-6 text-center text-gray-500">Loading CK inventory...</div>
-          ) : ckInventoryRows.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">No available inventory in CK Warehouse.</div>
+          ) : filteredSortedCkInventoryRows.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">No inventory matches the current filters.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -623,7 +954,7 @@ const SupplyOrderPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {ckInventoryRows.map((row) => (
+                  {filteredSortedCkInventoryRows.map((row) => (
                     <tr key={`${row.location_id}-${row.batch_id}-${row.product_id}`}>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         <div className="font-semibold">{formatProductWithUnit(row.product_name, row.unit)}</div>
@@ -814,6 +1145,7 @@ const SupplyOrderPage = () => {
                         {selectedOrder.status === 'Closed' && (
                           <>
                             <p>Closed reason: {selectedOrder.close_reason || '-'}</p>
+                            <p>Closed by: {selectedOrder.closed_by_username || selectedOrder.closed_by || '-'}</p>
                             <p>Closed at: {formatDateTime(selectedOrder.closed_at)}</p>
                             <p>Closed note: {selectedOrder.close_note || '-'}</p>
                           </>
@@ -871,7 +1203,7 @@ const SupplyOrderPage = () => {
                       <tbody className="bg-white divide-y divide-gray-200">
                         {selectedItems.map((item) => {
                           const canDeliver =
-                            (isAdmin || isCentralStaff) &&
+                            isCentralStaff &&
                             (selectedOrder.status === 'Approved' || selectedOrder.status === 'Partly Delivered') &&
                             item.approved_qty > 0 &&
                             (item.remaining_qty || 0) > 0;
@@ -893,6 +1225,8 @@ const SupplyOrderPage = () => {
                                   className={`px-2 py-1 rounded-full text-xs font-semibold ${
                                     item.status === 'Approved'
                                       ? getStatusBadgeClass('ApprovedItem')
+                                      : item.status === 'Pending'
+                                      ? getStatusBadgeClass('Pending')
                                       : getStatusBadgeClass('Rejected')
                                   }`}
                                 >
@@ -1089,10 +1423,18 @@ const SupplyOrderPage = () => {
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requested</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Approve Qty</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Projected Available</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {approveOrder.items.map((item) => (
+                      (() => {
+                        const approvedQty = approveQtyMap[item.supply_order_item_id] ?? 0;
+                        const inventoryAvailable = approveInventoryMap[item.product_id] ?? 0;
+                        const reservedProduct = approveReserveMap[item.product_id] ?? 0;
+                        const projectedAvailable = inventoryAvailable - reservedProduct - approvedQty;
+
+                        return (
                       <tr key={item.supply_order_item_id}>
                         <td className="px-4 py-2 text-sm">
                           <div className="font-semibold">{formatProductWithUnit(item.product_name, item.unit)}</div>
@@ -1104,7 +1446,7 @@ const SupplyOrderPage = () => {
                             type="number"
                             min={0}
                             max={item.requested_qty}
-                            value={approveQtyMap[item.supply_order_item_id] ?? 0}
+                            value={approvedQty}
                             onChange={(e) => {
                               const value = Math.max(parseInt(e.target.value || '0', 10), 0);
                               setApproveQtyMap((prev) => ({
@@ -1115,10 +1457,24 @@ const SupplyOrderPage = () => {
                             className="w-32 px-2 py-1 border border-gray-300 rounded text-right"
                           />
                         </td>
+                        <td className="px-4 py-2 text-sm text-right">
+                          <span className={projectedAvailable < 0 ? 'font-semibold text-red-600' : 'text-gray-700'}>
+                            {projectedAvailable}
+                          </span>
+                          {projectedAvailable < 0 && (
+                            <div className="text-[11px] text-red-500">Over-approve</div>
+                          )}
+                        </td>
                       </tr>
+                        );
+                      })()
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Projected Available is calculated by product-level reserve: CK available - reserved (approved - consumed - released) - approve qty.
               </div>
 
               <div>
@@ -1169,23 +1525,64 @@ const SupplyOrderPage = () => {
                 <p><span className="text-gray-500">Approved:</span> {deliveryDraft.item.approved_qty}</p>
                 <p><span className="text-gray-500">Delivered:</span> {deliveryDraft.item.delivered_qty}</p>
                 <p><span className="text-gray-500">Remaining:</span> <span className="font-semibold text-indigo-700">{deliveryDraft.item.remaining_qty || 0}</span></p>
+                <p><span className="text-gray-500">Reserve Rule Mode:</span> <span className="font-semibold text-slate-700">{deliveryRuleMode}</span></p>
+                <p><span className="text-gray-500">Reserve Remaining:</span> {deliveryReserveRemaining}</p>
+                <p><span className="text-gray-500">Allocated Remaining:</span> {deliveryAllocatedTotal}</p>
+                <p><span className="text-gray-500">Unallocated Remaining:</span> {deliveryUnallocatedRemaining}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
-                <select
-                  value={deliveryBatchId}
-                  onChange={(e) => setDeliveryBatchId(e.target.value ? parseInt(e.target.value, 10) : '')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  required
-                >
-                  <option value="">Select batch from CK Warehouse</option>
-                  {deliveryBatchOptions.map((row) => (
-                    <option key={`${row.location_id}-${row.batch_id}`} value={row.batch_id}>
-                      {row.batch_code || row.batch_id} | EXP: {formatDateOnly(row.expired_date)} | {row.location_name} | Avail: {row.qty_available}
-                    </option>
-                  ))}
-                </select>
+                {deliveryBatchOptions.length === 0 ? (
+                  <div className="px-3 py-2 border border-amber-200 bg-amber-50 rounded-lg text-sm text-amber-800">
+                    No batch available for current reserve rule. Please review reserve allocation or inventory.
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">Choose</th>
+                            <th className="px-3 py-2 text-left font-medium">Batch</th>
+                            <th className="px-3 py-2 text-left font-medium">Expire Date</th>
+                            <th className="px-3 py-2 text-left font-medium">Location</th>
+                            <th className="px-3 py-2 text-right font-medium">Available Inventory</th>
+                            <th className="px-3 py-2 text-right font-medium">Allocated Avail</th>
+                            <th className="px-3 py-2 text-right font-medium">Max Deliver</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {deliveryBatchOptions.map((row) => {
+                            const isSelected = deliveryBatchKey === row.key;
+                            return (
+                              <tr
+                                key={`${row.location_id}-${row.batch_id}`}
+                                className={`cursor-pointer ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                                onClick={() => setDeliveryBatchKey(row.key)}
+                              >
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="radio"
+                                    name="deliveryBatch"
+                                    checked={isSelected}
+                                    onChange={() => setDeliveryBatchKey(row.key)}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 font-medium text-gray-900">{row.batch_code || row.batch_id}</td>
+                                <td className="px-3 py-2 text-gray-700">{formatDateOnly(row.expired_date)}</td>
+                                <td className="px-3 py-2 text-gray-700">{row.location_name}</td>
+                                <td className="px-3 py-2 text-right text-gray-700">{row.qty_available}</td>
+                                <td className="px-3 py-2 text-right text-gray-700">{row.allocatedRemainingQty}</td>
+                                <td className="px-3 py-2 text-right font-semibold text-blue-700">{row.maxDeliverableQty}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1193,12 +1590,20 @@ const SupplyOrderPage = () => {
                 <input
                   type="number"
                   min={1}
-                  max={Math.max(deliveryDraft.item.remaining_qty || 0, 1)}
+                  max={Math.max(selectedDeliveryBatchOption?.maxDeliverableQty || 0, 1)}
                   value={deliveryQty}
                   onChange={(e) => setDeliveryQty(parseInt(e.target.value || '0', 10))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   required
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Max allowed by allocation rule (after order-level reserve limits): {selectedDeliveryBatchOption?.maxDeliverableQty || 0}
+                </p>
+                {selectedDeliveryBatchOption ? (
+                  <p className="mt-1 text-xs text-slate-700">
+                    System consume order: allocated first <span className="font-semibold text-indigo-700">{deliveryConsumePreview.allocatedFirst}</span>, then unallocated <span className="font-semibold text-blue-700">{deliveryConsumePreview.unallocatedSecond}</span>.
+                  </p>
+                ) : null}
               </div>
 
               <div>

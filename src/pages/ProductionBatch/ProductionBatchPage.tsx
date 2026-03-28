@@ -23,7 +23,7 @@ import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { formatProductWithUnit } from '@/utils/productDisplay';
 
 const ProductionBatchPage = () => {
-  const { isAdmin, isCentralStaff } = useAuth();
+  const { isCentralStaff } = useAuth();
   const { showToast } = useToast();
   const { confirm, confirmDialog } = useConfirmDialog();
   const [plans, setPlans] = useState<ProductionPlanWithProduct[]>([]);
@@ -758,7 +758,7 @@ const ProductionBatchPage = () => {
                         {getStatusBadge(plan.status)}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {(isCentralStaff || isAdmin) && (plan.status === 'planned' || plan.status === 'in_production') && (
+                        {isCentralStaff && (plan.status === 'planned' || plan.status === 'in_production') && (
                           <button
                             onClick={() => handleOpenProduceModal(plan)}
                             className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs font-semibold flex items-center gap-1"
@@ -840,7 +840,7 @@ const ProductionBatchPage = () => {
                               >
                                 <EyeIcon className="h-5 w-5" />
                               </button>
-                              {(isCentralStaff || isAdmin) && batch.status !== 'cancelled' && batch.status !== 'rejected' && (
+                              {isCentralStaff && batch.status !== 'cancelled' && batch.status !== 'rejected' && (
                                 <>
                                   {batch.status === 'producing' && (
                                     <button
@@ -877,7 +877,7 @@ const ProductionBatchPage = () => {
                                 </>
                               )}
                               {/* Delivery button: show when good_qty > 0 */}
-                              {(isCentralStaff || isAdmin) &&
+                              {isCentralStaff &&
                                 (batch.good_qty ?? 0) > 0 &&
                                 !['cancelled', 'rejected', 'delivered', 'received'].includes(batch.status) && (
                                   <button

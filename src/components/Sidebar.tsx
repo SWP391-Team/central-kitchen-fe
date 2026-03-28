@@ -6,6 +6,7 @@ import {
   BuildingStorefrontIcon,
   CheckCircleIcon,
   CircleStackIcon,
+  ClockIcon,
   ClipboardDocumentCheckIcon,
   ClipboardDocumentIcon,
   ClipboardDocumentListIcon,
@@ -80,6 +81,12 @@ const menuSections: MenuSection[] = [
         icon: ClipboardDocumentIcon,
         roles: [1, 2, 3],
         hidden: (user) => user.role_id === 3 && !user.location_id,
+      },
+      {
+        name: 'Reserve',
+        path: '/reserve',
+        icon: ClockIcon,
+        roles: [1, 2, 3],
       },
       {
         name: 'Batch Transfer',
