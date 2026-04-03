@@ -668,7 +668,8 @@ const SupplyOrderPage = () => {
   const canApprove =
     isCentralStaff &&
     selectedOrder?.status === 'Pending';
-  const canCloseOrder = isCentralStaff && !!selectedOrder && selectedOrder.status !== 'Closed';
+  const canCloseOrder =
+    (isCentralStaff || isStoreStaff) && !!selectedOrder && selectedOrder.status !== 'Closed';
 
   const totalPages = Math.max(Math.ceil(totalOrders / limit), 1);
 
