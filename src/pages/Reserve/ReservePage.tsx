@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { reserveService } from '@/api/services/reserveService';
 import { supplyOrderService } from '@/api/services/supplyOrderService';
+import PaginationControls from '@/components/PaginationControls';
 import {
   CkInventoryRow,
   ReserveBatchRecord,
@@ -82,6 +83,10 @@ const ReservePage = () => {
   const [productSort, setProductSort] = useState<ProductSort>('updated_desc');
   const [batchSort, setBatchSort] = useState<BatchSort>('updated_desc');
   const [historySort, setHistorySort] = useState<HistorySort>('time_desc');
+  const [productCurrentPage, setProductCurrentPage] = useState(1);
+  const [batchCurrentPage, setBatchCurrentPage] = useState(1);
+  const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
   const [allocating, setAllocating] = useState(false);
@@ -112,6 +117,18 @@ const ReservePage = () => {
 
     void loadReserveHistory();
   }, [activeTab, productStatusFilter, batchStatusFilter, debouncedSearch]);
+
+  useEffect(() => {
+    setProductCurrentPage(1);
+  }, [debouncedSearch, productStatusFilter, productAllocationFilter, productSort]);
+
+  useEffect(() => {
+    setBatchCurrentPage(1);
+  }, [debouncedSearch, batchStatusFilter, batchSort]);
+
+  useEffect(() => {
+    setHistoryCurrentPage(1);
+  }, [debouncedSearch, historyEventFilter, historySort]);
 
   const loadProductReserves = async () => {
     try {
@@ -316,6 +333,27 @@ const ReservePage = () => {
     return sorted;
   }, [historyRows, debouncedSearch, historyEventFilter, historySort]);
 
+  const productTotalPages = Math.max(1, Math.ceil(filteredSortedProductRows.length / pageSize));
+  const safeProductCurrentPage = Math.min(productCurrentPage, productTotalPages);
+  const paginatedProductRows = filteredSortedProductRows.slice(
+    (safeProductCurrentPage - 1) * pageSize,
+    safeProductCurrentPage * pageSize
+  );
+
+  const batchTotalPages = Math.max(1, Math.ceil(filteredSortedBatchRows.length / pageSize));
+  const safeBatchCurrentPage = Math.min(batchCurrentPage, batchTotalPages);
+  const paginatedBatchRows = filteredSortedBatchRows.slice(
+    (safeBatchCurrentPage - 1) * pageSize,
+    safeBatchCurrentPage * pageSize
+  );
+
+  const historyTotalPages = Math.max(1, Math.ceil(filteredSortedHistoryRows.length / pageSize));
+  const safeHistoryCurrentPage = Math.min(historyCurrentPage, historyTotalPages);
+  const paginatedHistoryRows = filteredSortedHistoryRows.slice(
+    (safeHistoryCurrentPage - 1) * pageSize,
+    safeHistoryCurrentPage * pageSize
+  );
+
   const handleSubmitAllocate = async () => {
     if (!selectedReserve) return;
 
@@ -515,75 +553,87 @@ const ReservePage = () => {
           {loadingProducts ? (
             <div className="p-8 text-center text-gray-500">Loading reserve products...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Location</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Allocation Level</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Approved</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Allocated Remaining (Batch)</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Unallocated Remaining</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Consumed</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Released</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredSortedProductRows.length === 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={12} className="px-4 py-8 text-center text-sm text-gray-500">
-                        No reserve product records
-                      </td>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Location</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Allocation Level</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Approved</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Allocated Remaining (Batch)</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Unallocated Remaining</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Consumed</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Released</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Action</th>
                     </tr>
-                  ) : (
-                    filteredSortedProductRows.map((row) => (
-                      <tr key={row.reserve_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          <div className="font-medium text-gray-900">{formatProductWithUnit(row.product_name || '-', row.unit_name || null)}</div>
-                          <div className="text-xs text-gray-500">{row.product_code || '-'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.location_name || row.location_id}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getAllocationLevelBadge(row.allocation_level)}`}>
-                            {row.allocation_level || 'NONE'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadge(row.status)}`}>
-                            {row.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.approved_qty}</td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold text-indigo-700">{row.allocated_remaining_qty || 0}</td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold text-blue-700">{row.remaining_qty}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.consumed_qty}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.released_qty}</td>
-                        <td className="px-4 py-3 text-right">
-                          {canAllocate && row.remaining_qty > 0 ? (
-                            <button
-                              onClick={() => openAllocateModal(row)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                            >
-                              <PlusIcon className="h-4 w-4" />
-                              Allocate
-                            </button>
-                          ) : (
-                            <span className="text-xs text-gray-400">-</span>
-                          )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredSortedProductRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={12} className="px-4 py-8 text-center text-sm text-gray-500">
+                          No reserve product records
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      paginatedProductRows.map((row) => (
+                        <tr key={row.reserve_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_code || '-'}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            <div className="font-medium text-gray-900">{formatProductWithUnit(row.product_name || '-', row.unit_name || null)}</div>
+                            <div className="text-xs text-gray-500">{row.product_code || '-'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.location_name || row.location_id}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getAllocationLevelBadge(row.allocation_level)}`}>
+                              {row.allocation_level || 'NONE'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadge(row.status)}`}>
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.approved_qty}</td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-indigo-700">{row.allocated_remaining_qty || 0}</td>
+                          <td className="px-4 py-3 text-right text-sm font-semibold text-blue-700">{row.remaining_qty}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.consumed_qty}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.released_qty}</td>
+                          <td className="px-4 py-3 text-right">
+                            {canAllocate && row.remaining_qty > 0 ? (
+                              <button
+                                onClick={() => openAllocateModal(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                              >
+                                <PlusIcon className="h-4 w-4" />
+                                Allocate
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-4 pb-4">
+                <PaginationControls
+                  currentPage={safeProductCurrentPage}
+                  totalPages={productTotalPages}
+                  totalItems={filteredSortedProductRows.length}
+                  pageSize={pageSize}
+                  onPageChange={setProductCurrentPage}
+                />
+              </div>
+            </>
           )}
         </div>
       ) : null}
@@ -593,55 +643,67 @@ const ReservePage = () => {
           {loadingBatches ? (
             <div className="p-8 text-center text-gray-500">Loading reserve batches...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Batch Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Batch</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Location</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Allocated</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Consumed</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Released</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredSortedBatchRows.length === 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
-                        No reserve batch records
-                      </td>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Batch Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Batch</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Location</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Allocated</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Consumed</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Released</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                     </tr>
-                  ) : (
-                    filteredSortedBatchRows.map((row) => (
-                      <tr key={row.reserve_batch_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_batch_code || '-'}</td>
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-indigo-700">{row.reserve_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          <div className="font-medium text-gray-900">{formatProductWithUnit(row.product_name || '-', row.unit_name || null)}</div>
-                          <div className="text-xs text-gray-500">{row.product_code || '-'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.batch_code || row.batch_id}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.location_name || row.location_id}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.allocated_qty}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.consumed_qty}</td>
-                        <td className="px-4 py-3 text-right text-sm text-gray-700">{row.released_qty}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadge(row.status)}`}>
-                            {row.status}
-                          </span>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredSortedBatchRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
+                          No reserve batch records
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      paginatedBatchRows.map((row) => (
+                        <tr key={row.reserve_batch_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_batch_code || '-'}</td>
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-indigo-700">{row.reserve_code || '-'}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            <div className="font-medium text-gray-900">{formatProductWithUnit(row.product_name || '-', row.unit_name || null)}</div>
+                            <div className="text-xs text-gray-500">{row.product_code || '-'}</div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.batch_code || row.batch_id}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.location_name || row.location_id}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.allocated_qty}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.consumed_qty}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">{row.released_qty}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadge(row.status)}`}>
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-4 pb-4">
+                <PaginationControls
+                  currentPage={safeBatchCurrentPage}
+                  totalPages={batchTotalPages}
+                  totalItems={filteredSortedBatchRows.length}
+                  pageSize={pageSize}
+                  onPageChange={setBatchCurrentPage}
+                />
+              </div>
+            </>
           )}
         </div>
       ) : null}
@@ -651,56 +713,68 @@ const ReservePage = () => {
           {loadingHistory ? (
             <div className="p-8 text-center text-gray-500">Loading reserve history...</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Batch Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Batch</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Event</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Qty Change</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Ref</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Note</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredSortedHistoryRows.length === 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
-                        No reserve history records
-                      </td>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Batch Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reserve Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Time</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">SO Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Product</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Batch</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Event</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Qty Change</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Ref</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Note</th>
                     </tr>
-                  ) : (
-                    filteredSortedHistoryRows.map((row) => (
-                      <tr key={row.reserve_history_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_batch_code || row.reserve_code || '-'}</td>
-                        <td className="px-4 py-3 text-xs font-mono font-semibold text-indigo-700">{row.reserve_code || '-'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-600">{formatDateTime(row.created_at)}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.product_code || row.product_name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{row.batch_code || '-'}</td>
-                        <td className="px-4 py-3 text-xs font-semibold text-gray-700">{row.event_type}</td>
-                        <td
-                          className={`px-4 py-3 text-right text-sm font-semibold ${
-                            row.qty_change >= 0 ? 'text-emerald-700' : 'text-red-600'
-                          }`}
-                        >
-                          {row.qty_change >= 0 ? `+${row.qty_change}` : row.qty_change}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredSortedHistoryRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-8 text-center text-sm text-gray-500">
+                          No reserve history records
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">
-                          {row.ref_type ? `${row.ref_type}:${row.ref_id || '-'}` : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">{row.note || '-'}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    ) : (
+                      paginatedHistoryRows.map((row) => (
+                        <tr key={row.reserve_history_id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-purple-700">{row.reserve_batch_code || row.reserve_code || '-'}</td>
+                          <td className="px-4 py-3 text-xs font-mono font-semibold text-indigo-700">{row.reserve_code || '-'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{formatDateTime(row.created_at)}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-800">{row.supply_order_code || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.product_code || row.product_name || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{row.batch_code || '-'}</td>
+                          <td className="px-4 py-3 text-xs font-semibold text-gray-700">{row.event_type}</td>
+                          <td
+                            className={`px-4 py-3 text-right text-sm font-semibold ${
+                              row.qty_change >= 0 ? 'text-emerald-700' : 'text-red-600'
+                            }`}
+                          >
+                            {row.qty_change >= 0 ? `+${row.qty_change}` : row.qty_change}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">
+                            {row.ref_type ? `${row.ref_type}:${row.ref_id || '-'}` : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{row.note || '-'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-4 pb-4">
+                <PaginationControls
+                  currentPage={safeHistoryCurrentPage}
+                  totalPages={historyTotalPages}
+                  totalItems={filteredSortedHistoryRows.length}
+                  pageSize={pageSize}
+                  onPageChange={setHistoryCurrentPage}
+                />
+              </div>
+            </>
           )}
         </div>
       ) : null}

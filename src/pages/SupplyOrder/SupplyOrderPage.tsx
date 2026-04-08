@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   CheckCircleIcon,
+  EyeIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
   PaperAirplaneIcon,
@@ -17,6 +19,9 @@ import {
   SupplyOrder,
   SupplyOrderDetailResponse,
   SupplyOrderItem,
+  SupplyOrderPriority,
+  SupplyOrderShortageReason,
+  SupplyOrderSourceType,
   SupplyOrderStatus,
 } from '@/api/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,7 +48,16 @@ const CLOSE_REASONS = ['Out of stock', 'Production issue', 'No longer needed', '
 type CreateItemRow = {
   product_id: number | null;
   requested_qty: number;
+  need_by_date_item: string;
 };
+
+const PRIORITY_OPTIONS: SupplyOrderPriority[] = ['LOW', 'NORMAL', 'URGENT'];
+const SHORTAGE_REASON_OPTIONS: SupplyOrderShortageReason[] = [
+  'OUT_OF_STOCK',
+  'LOW_STOCK',
+  'QUALITY_ISSUE',
+  'OTHER',
+];
 
 type DeliveryDraft = {
   orderId: number;
@@ -60,6 +74,44 @@ type DeliveryBatchOption = CkInventoryRow & {
   allocationSource: 'allocated' | 'unallocated' | 'mixed';
 };
 
+type ProductDemandStoreBreakdown = {
+  storeKey: string;
+  storeLocationId: number;
+  storeName: string;
+  orderCount: number;
+  requestedQty: number;
+  approvedQty: number;
+  deliveredQty: number;
+  remainingQty: number;
+  orders: Array<{
+    orderId: number;
+    orderCode: string;
+    status: SupplyOrderStatus;
+    priority?: SupplyOrderPriority;
+    orderDate: string | null;
+    needByDate: string | null;
+    requestedQty: number;
+    approvedQty: number;
+    deliveredQty: number;
+    remainingQty: number;
+    itemId: number;
+  }>;
+};
+
+type ProductDemandRow = {
+  productId: number;
+  productCode: string;
+  productName: string;
+  unit: string;
+  earliestNeedByDate: string | null;
+  orderCount: number;
+  requestedQty: number;
+  approvedQty: number;
+  deliveredQty: number;
+  remainingQty: number;
+  stores: ProductDemandStoreBreakdown[];
+};
+
 const formatDate = (value?: string | null) => {
   if (!value) return '-';
   return new Date(value).toLocaleDateString();
@@ -73,6 +125,23 @@ const formatDateTime = (value?: string | null) => {
 const formatDateOnly = (value?: string | null) => {
   if (!value) return '-';
   return new Date(value).toLocaleDateString();
+};
+
+const toDateInputValue = (value?: string | null) => {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const directDateMatch = raw.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (directDateMatch) {
+    return directDateMatch[1];
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getStatusBadgeClass = (status: string) => {
@@ -93,8 +162,9 @@ const getStatusBadgeClass = (status: string) => {
 const SupplyOrderPage = () => {
   const { user, isAdmin, isCentralStaff, isStoreStaff } = useAuth();
   const { showToast } = useToast();
+  const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState<'ck-inventory' | 'supply-order'>('ck-inventory');
+  const [activeTab, setActiveTab] = useState<'ck-inventory' | 'supply-order' | 'demand-board'>('ck-inventory');
 
   const [orders, setOrders] = useState<SupplyOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -125,6 +195,10 @@ const SupplyOrderPage = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<SupplyOrderDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [groupedDemandRows, setGroupedDemandRows] = useState<ProductDemandRow[]>([]);
+  const [groupedDemandLoading, setGroupedDemandLoading] = useState(false);
+  const [selectedDemandRow, setSelectedDemandRow] = useState<ProductDemandRow | null>(null);
+  const [selectedDemandStore, setSelectedDemandStore] = useState<ProductDemandStoreBreakdown | null>(null);
 
   const [locations, setLocations] = useState<Location[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -137,13 +211,29 @@ const SupplyOrderPage = () => {
   const [requesterSuggestions, setRequesterSuggestions] = useState<RequesterSuggestion[]>([]);
   const [showRequesterSuggestions, setShowRequesterSuggestions] = useState(false);
   const [requesterKeywordDebounce, setRequesterKeywordDebounce] = useState('');
+  const [createOrderDate, setCreateOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [createNeedByDate, setCreateNeedByDate] = useState('');
+  const [createPriority, setCreatePriority] = useState<SupplyOrderPriority>('NORMAL');
+  const [createSourceType, setCreateSourceType] = useState<SupplyOrderSourceType>('MANUAL');
+  const [reorderFromOrderId, setReorderFromOrderId] = useState<number | null>(null);
+  const [reorderFromOrderCode, setReorderFromOrderCode] = useState<string | null>(null);
   const [createNote, setCreateNote] = useState('');
-  const [createItems, setCreateItems] = useState<CreateItemRow[]>([{ product_id: null, requested_qty: 1 }]);
+  const [createItems, setCreateItems] = useState<CreateItemRow[]>([
+    {
+      product_id: null,
+      requested_qty: 1,
+      need_by_date_item: '',
+    },
+  ]);
   const [creating, setCreating] = useState(false);
 
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [approveOrder, setApproveOrder] = useState<SupplyOrderDetailResponse | null>(null);
   const [approveQtyMap, setApproveQtyMap] = useState<Record<number, number>>({});
+  const [approveShortageReasonMap, setApproveShortageReasonMap] = useState<
+    Record<number, SupplyOrderShortageReason | ''>
+  >({});
+  const [approveExpectedDeliveryMap, setApproveExpectedDeliveryMap] = useState<Record<number, string>>({});
   const [approveNote, setApproveNote] = useState('');
   const [approveInventoryMap, setApproveInventoryMap] = useState<Record<number, number>>({});
   const [approveReserveMap, setApproveReserveMap] = useState<Record<number, number>>({});
@@ -165,6 +255,7 @@ const SupplyOrderPage = () => {
   const [closeReason, setCloseReason] = useState<(typeof CLOSE_REASONS)[number]>('Out of stock');
   const [closeNote, setCloseNote] = useState('');
   const [closing, setClosing] = useState(false);
+  const [highlightedOrderItemId, setHighlightedOrderItemId] = useState<number | null>(null);
 
   const userStoreLocationId = user?.location_id ?? null;
 
@@ -208,7 +299,7 @@ const SupplyOrderPage = () => {
       void loadCkInventory();
     }
 
-    if (activeTab === 'supply-order' || !isStoreStaff) {
+    if (activeTab === 'supply-order' || activeTab === 'demand-board' || !isStoreStaff) {
       void loadOrders();
     }
   }, [activeTab, searchDebounce, statusFilter, locationFilter, page, limit]);
@@ -221,6 +312,32 @@ const SupplyOrderPage = () => {
 
     void loadRequesterSuggestions(requesterKeywordDebounce);
   }, [showCreateModal, requesterKeywordDebounce]);
+
+  useEffect(() => {
+    if (!(isAdmin || isCentralStaff)) {
+      setGroupedDemandRows([]);
+      return;
+    }
+
+    if (activeTab !== 'supply-order' && isStoreStaff) {
+      return;
+    }
+
+    void loadGroupedDemandFromOrders(orders);
+  }, [orders, isAdmin, isCentralStaff, activeTab, isStoreStaff]);
+
+  useEffect(() => {
+    if (!isStoreStaff) {
+      setActiveTab((prev) => (prev === 'ck-inventory' ? 'supply-order' : prev));
+    }
+  }, [isStoreStaff]);
+
+  useEffect(() => {
+    const requestedTab = (location.state as { openTab?: string } | null)?.openTab;
+    if (requestedTab === 'demand-board' && (isAdmin || isCentralStaff)) {
+      setActiveTab('demand-board');
+    }
+  }, [location.key, location.state, isAdmin, isCentralStaff]);
 
   const loadInitialData = async () => {
     try {
@@ -321,8 +438,161 @@ const SupplyOrderPage = () => {
     }
   };
 
+  const loadGroupedDemandFromOrders = async (rows: SupplyOrder[]) => {
+    if (!(isAdmin || isCentralStaff)) return;
+
+    if (rows.length === 0) {
+      setGroupedDemandRows([]);
+      return;
+    }
+
+    try {
+      setGroupedDemandLoading(true);
+      const details = await Promise.allSettled(
+        rows.map((order) => supplyOrderService.getDetail(order.supply_order_id))
+      );
+
+      const grouped = new Map<number, ProductDemandRow>();
+
+      details.forEach((result) => {
+        if (result.status !== 'fulfilled') return;
+
+        const detail = result.value;
+        const order = detail.order;
+        const storeName =
+          order.location_name || locationNameMap.get(order.location_id) || `Location #${order.location_id}`;
+        const storeKey = String(order.location_id);
+
+        detail.items.forEach((item) => {
+          const group = grouped.get(item.product_id) || {
+            productId: item.product_id,
+            productCode: item.product_code || '-',
+            productName: item.product_name || '-',
+            unit: item.unit || '-',
+            earliestNeedByDate: item.need_by_date_item || order.need_by_date || order.order_date || null,
+            orderCount: 0,
+            requestedQty: 0,
+            approvedQty: 0,
+            deliveredQty: 0,
+            remainingQty: 0,
+            stores: [],
+          };
+
+          const itemNeedBy = item.need_by_date_item || order.need_by_date || order.order_date || null;
+          if (!group.earliestNeedByDate || (itemNeedBy && itemNeedBy < group.earliestNeedByDate)) {
+            group.earliestNeedByDate = itemNeedBy;
+          }
+
+          group.orderCount += 1;
+          group.requestedQty += Number(item.requested_qty || 0);
+          group.approvedQty += Number(item.approved_qty || 0);
+          group.deliveredQty += Number(item.delivered_qty || 0);
+          group.remainingQty += Math.max(Number(item.remaining_qty || 0), 0);
+
+          const existingStore = group.stores.find((entry) => entry.storeKey === storeKey);
+          if (existingStore) {
+            existingStore.orderCount += 1;
+            existingStore.requestedQty += Number(item.requested_qty || 0);
+            existingStore.approvedQty += Number(item.approved_qty || 0);
+            existingStore.deliveredQty += Number(item.delivered_qty || 0);
+            existingStore.remainingQty += Math.max(Number(item.remaining_qty || 0), 0);
+            existingStore.orders.push({
+              orderId: order.supply_order_id,
+              orderCode: order.supply_order_code,
+              status: order.status,
+              priority: order.priority || 'NORMAL',
+              orderDate: order.order_date || order.created_at || null,
+              needByDate: item.need_by_date_item || order.need_by_date || null,
+              requestedQty: Number(item.requested_qty || 0),
+              approvedQty: Number(item.approved_qty || 0),
+              deliveredQty: Number(item.delivered_qty || 0),
+              remainingQty: Math.max(Number(item.remaining_qty || 0), 0),
+              itemId: item.supply_order_item_id,
+            });
+          } else {
+            group.stores.push({
+              storeKey,
+              storeLocationId: order.location_id,
+              storeName,
+              orderCount: 1,
+              requestedQty: Number(item.requested_qty || 0),
+              approvedQty: Number(item.approved_qty || 0),
+              deliveredQty: Number(item.delivered_qty || 0),
+              remainingQty: Math.max(Number(item.remaining_qty || 0), 0),
+              orders: [
+                {
+                  orderId: order.supply_order_id,
+                  orderCode: order.supply_order_code,
+                  status: order.status,
+                  priority: order.priority || 'NORMAL',
+                  orderDate: order.order_date || order.created_at || null,
+                  needByDate: item.need_by_date_item || order.need_by_date || null,
+                  requestedQty: Number(item.requested_qty || 0),
+                  approvedQty: Number(item.approved_qty || 0),
+                  deliveredQty: Number(item.delivered_qty || 0),
+                  remainingQty: Math.max(Number(item.remaining_qty || 0), 0),
+                  itemId: item.supply_order_item_id,
+                },
+              ],
+            });
+          }
+
+          grouped.set(item.product_id, group);
+        });
+      });
+
+      const mapped = Array.from(grouped.values())
+        .map((row) => ({
+          ...row,
+          stores: row.stores
+            .map((store) => ({
+              ...store,
+              orders: store.orders.sort((a, b) => {
+                const aDate = a.needByDate || '9999-12-31';
+                const bDate = b.needByDate || '9999-12-31';
+                if (aDate !== bDate) return aDate.localeCompare(bDate);
+                return b.remainingQty - a.remainingQty;
+              }),
+            }))
+            .sort((a, b) => b.remainingQty - a.remainingQty),
+        }))
+        .sort((a, b) => {
+          const aNeedBy = a.earliestNeedByDate || '9999-12-31';
+          const bNeedBy = b.earliestNeedByDate || '9999-12-31';
+          if (aNeedBy !== bNeedBy) return aNeedBy.localeCompare(bNeedBy);
+          return b.remainingQty - a.remainingQty;
+        });
+
+      setGroupedDemandRows(mapped);
+
+      if (mapped.length === 0) {
+        setSelectedDemandRow(null);
+        setSelectedDemandStore(null);
+        return;
+      }
+
+      const nextSelectedRow =
+        selectedDemandRow && mapped.some((row) => row.productId === selectedDemandRow.productId)
+          ? mapped.find((row) => row.productId === selectedDemandRow.productId) || mapped[0]
+          : mapped[0];
+
+      setSelectedDemandRow(nextSelectedRow);
+
+      const nextSelectedStore =
+        selectedDemandStore &&
+        nextSelectedRow.stores.some((store) => store.storeKey === selectedDemandStore.storeKey)
+          ? nextSelectedRow.stores.find((store) => store.storeKey === selectedDemandStore.storeKey) || null
+          : null;
+
+      setSelectedDemandStore(nextSelectedStore);
+    } finally {
+      setGroupedDemandLoading(false);
+    }
+  };
+
   const handleSelectOrder = (orderId: number) => {
     setSelectedOrderId(orderId);
+    setHighlightedOrderItemId(null);
     void loadDetail(orderId);
   };
 
@@ -331,13 +601,74 @@ const SupplyOrderPage = () => {
     setSelectedRequesterUserId(null);
     setRequesterSuggestions([]);
     setShowRequesterSuggestions(false);
+    const today = new Date().toISOString().slice(0, 10);
+    setCreateOrderDate(today);
+    setCreateNeedByDate('');
+    setCreatePriority('NORMAL');
+    setCreateSourceType('MANUAL');
+    setReorderFromOrderId(null);
+    setReorderFromOrderCode(null);
     setCreateNote('');
-    setCreateItems([{ product_id: null, requested_qty: 1 }]);
+    setCreateItems([
+      {
+        product_id: null,
+        requested_qty: 1,
+        need_by_date_item: '',
+      },
+    ]);
     setShowCreateModal(true);
   };
 
+  const openReorderModal = () => {
+    if (!selectedOrderDetail) return;
+
+    const sourceOrder = selectedOrderDetail.order;
+    const today = new Date().toISOString().slice(0, 10);
+
+    setRequestedByInput(
+      sourceOrder.requested_by_username
+        ? `${sourceOrder.requested_by_username} (${sourceOrder.requested_by_user_code || sourceOrder.requested_by})`
+        : String(sourceOrder.requested_by)
+    );
+    setSelectedRequesterUserId(sourceOrder.requested_by);
+    setRequesterSuggestions([]);
+    setShowRequesterSuggestions(false);
+    setCreateOrderDate(today);
+    const sourceNeedByDate = toDateInputValue(sourceOrder.need_by_date);
+    setCreateNeedByDate(sourceNeedByDate);
+    setCreatePriority(sourceOrder.priority || 'NORMAL');
+    setCreateSourceType('REORDER');
+    setReorderFromOrderId(sourceOrder.supply_order_id);
+    setReorderFromOrderCode(sourceOrder.supply_order_code);
+    setCreateNote(sourceOrder.note || '');
+    setCreateItems(
+      selectedOrderDetail.items.map((item) => ({
+        product_id: item.product_id,
+        requested_qty: item.requested_qty,
+        need_by_date_item: toDateInputValue(item.need_by_date_item) || sourceNeedByDate,
+      }))
+    );
+    setShowCreateModal(true);
+  };
+
+  const openOrderFromDemand = async (orderId: number, itemId: number) => {
+    setSelectedDemandStore(null);
+    setSelectedDemandRow(null);
+    setActiveTab('supply-order');
+    setSelectedOrderId(orderId);
+    setHighlightedOrderItemId(itemId);
+    await loadDetail(orderId);
+  };
+
   const addCreateItem = () => {
-    setCreateItems((prev) => [...prev, { product_id: null, requested_qty: 1 }]);
+    setCreateItems((prev) => [
+      ...prev,
+      {
+        product_id: null,
+        requested_qty: 1,
+        need_by_date_item: createNeedByDate,
+      },
+    ]);
   };
 
   const removeCreateItem = (index: number) => {
@@ -363,6 +694,21 @@ const SupplyOrderPage = () => {
       return;
     }
 
+    if (!createOrderDate) {
+      showToast('Please select order date', 'error');
+      return;
+    }
+
+    if (!createNeedByDate) {
+      showToast('Please select need by date', 'error');
+      return;
+    }
+
+    if (createNeedByDate < createOrderDate) {
+      showToast('Need by date must be on or after order date', 'error');
+      return;
+    }
+
     const productIds = createItems.map((item) => item.product_id).filter(Boolean) as number[];
     if (productIds.length !== createItems.length) {
       showToast('Please select product for all items', 'error');
@@ -383,14 +729,32 @@ const SupplyOrderPage = () => {
         showToast('Requested qty must be greater than 0', 'error');
         return;
       }
+
+      if (!item.need_by_date_item) {
+        showToast('Please select need by item for all items', 'error');
+        return;
+      }
+
+      if (item.need_by_date_item < createOrderDate) {
+        showToast('Item need by date must be on or after order date', 'error');
+        return;
+      }
+
     }
 
     const payload: CreateSupplyOrderRequest = {
       requested_by_user_id: selectedRequesterUserId,
+      order_date: createOrderDate,
+      need_by_date: createNeedByDate,
+      priority: createPriority,
+      source_type: createSourceType,
+      reorder_from_order_id:
+        createSourceType === 'REORDER' && reorderFromOrderId ? reorderFromOrderId : undefined,
       note: createNote.trim() || undefined,
       items: createItems.map((item) => ({
         product_id: item.product_id as number,
         requested_qty: item.requested_qty,
+        need_by_date_item: item.need_by_date_item,
       })),
     };
 
@@ -459,10 +823,16 @@ const SupplyOrderPage = () => {
       const detail = await supplyOrderService.getDetail(selectedOrderId);
       setApproveOrder(detail);
       const map: Record<number, number> = {};
+      const reasonMap: Record<number, SupplyOrderShortageReason | ''> = {};
+      const expectedDeliveryMap: Record<number, string> = {};
       detail.items.forEach((item) => {
         map[item.supply_order_item_id] = item.requested_qty;
+        reasonMap[item.supply_order_item_id] = item.shortage_reason || '';
+        expectedDeliveryMap[item.supply_order_item_id] = toDateInputValue(item.expected_delivery_date);
       });
       setApproveQtyMap(map);
+      setApproveShortageReasonMap(reasonMap);
+      setApproveExpectedDeliveryMap(expectedDeliveryMap);
       setApproveNote(detail.order.note || '');
 
       const productIds = Array.from(new Set(detail.items.map((item) => item.product_id)));
@@ -509,6 +879,23 @@ const SupplyOrderPage = () => {
         showToast(`Approved qty for ${item.product_name} must be between 0 and ${item.requested_qty}`, 'error');
         return;
       }
+
+      if (qty < item.requested_qty) {
+        const shortageReason = approveShortageReasonMap[item.supply_order_item_id];
+        if (!shortageReason) {
+          showToast(`Please select shortage reason for ${item.product_name}`, 'error');
+          return;
+        }
+      }
+
+      const expectedDelivery = approveExpectedDeliveryMap[item.supply_order_item_id];
+      if (expectedDelivery && item.need_by_date_item) {
+        const expectedDate = toDateInputValue(expectedDelivery);
+        if (expectedDate < item.need_by_date_item) {
+          showToast(`Expected delivery for ${item.product_name} must be on or after item need by date`, 'error');
+          return;
+        }
+      }
     }
 
     try {
@@ -518,6 +905,13 @@ const SupplyOrderPage = () => {
         items: approveOrder.items.map((item) => ({
           supply_order_item_id: item.supply_order_item_id,
           approved_qty: approveQtyMap[item.supply_order_item_id] ?? 0,
+          expected_delivery_date: approveExpectedDeliveryMap[item.supply_order_item_id]
+            ? `${approveExpectedDeliveryMap[item.supply_order_item_id]}T00:00:00.000Z`
+            : undefined,
+          shortage_reason:
+            (approveQtyMap[item.supply_order_item_id] ?? 0) < item.requested_qty
+              ? approveShortageReasonMap[item.supply_order_item_id] || undefined
+              : undefined,
         })),
       });
       showToast('Supply order approved successfully', 'success');
@@ -669,7 +1063,11 @@ const SupplyOrderPage = () => {
     isCentralStaff &&
     selectedOrder?.status === 'Pending';
   const canCloseOrder =
-    (isCentralStaff || isStoreStaff) && !!selectedOrder && selectedOrder.status !== 'Closed';
+    (isCentralStaff || isStoreStaff) &&
+    !!selectedOrder &&
+    selectedOrder.status !== 'Closed' &&
+    selectedOrder.status !== 'Delivered';
+  const canReorder = isStoreStaff && !!selectedOrder && selectedOrder.status !== 'Draft';
 
   const totalPages = Math.max(Math.ceil(totalOrders / limit), 1);
 
@@ -865,9 +1263,9 @@ const SupplyOrderPage = () => {
         </p>
       </div>
 
-      {isStoreStaff && (
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {isStoreStaff && (
             <button
               onClick={() => setActiveTab('ck-inventory')}
               className={`${
@@ -878,19 +1276,31 @@ const SupplyOrderPage = () => {
             >
               CK Inventory
             </button>
+          )}
+          {(isAdmin || isCentralStaff) && (
             <button
-              onClick={() => setActiveTab('supply-order')}
+              onClick={() => setActiveTab('demand-board')}
               className={`${
-                activeTab === 'supply-order'
+                activeTab === 'demand-board'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
             >
-              Supply Order
+              Demand Board
             </button>
-          </nav>
-        </div>
-      )}
+          )}
+          <button
+            onClick={() => setActiveTab('supply-order')}
+            className={`${
+              activeTab === 'supply-order'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+          >
+            Supply Order
+          </button>
+        </nav>
+      </div>
 
       {isStoreStaff && activeTab === 'ck-inventory' && (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -937,6 +1347,7 @@ const SupplyOrderPage = () => {
               <option value="batch_desc">Sort: Batch (Z-A)</option>
             </select>
           </div>
+
           {inventoryLoading ? (
             <div className="p-6 text-center text-gray-500">Loading CK inventory...</div>
           ) : filteredSortedCkInventoryRows.length === 0 ? (
@@ -948,9 +1359,9 @@ const SupplyOrderPage = () => {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">On Hand</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Available</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
                   </tr>
                 </thead>
@@ -961,11 +1372,14 @@ const SupplyOrderPage = () => {
                         <div className="font-semibold">{formatProductWithUnit(row.product_name, row.unit)}</div>
                         <div className="text-xs text-gray-500">{row.product_code}</div>
                       </td>
-                      <td className="px-4 py-3 text-sm font-mono text-blue-700">{row.batch_code || row.batch_id}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-900">{row.qty_on_hand}</td>
-                      <td className="px-4 py-3 text-sm text-right font-semibold text-green-700">{row.qty_available}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">
+                        <div>{row.batch_code}</div>
+                        <div className="text-xs text-gray-500">Exp: {formatDateOnly(row.expired_date)}</div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-gray-700">{row.location_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{formatDateTime(row.updated_at)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-700">{row.qty_on_hand}</td>
+                      <td className="px-4 py-3 text-sm text-right font-semibold text-indigo-700">{row.qty_available}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700">{formatDateTime(row.updated_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -975,7 +1389,7 @@ const SupplyOrderPage = () => {
         </div>
       )}
 
-      {(!isStoreStaff || activeTab === 'supply-order') && (
+      {activeTab === 'supply-order' && (
         <>
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[240px]">
@@ -1086,7 +1500,15 @@ const SupplyOrderPage = () => {
                           <p className="text-xs text-gray-500 mt-1">
                             Requested by: {order.requested_by_username || order.requested_by_user_code || order.requested_by}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">Created: {formatDate(order.created_at)}</p>
+                          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-500">
+                            <p>Order: {formatDate(order.order_date || order.created_at)}</p>
+                            <p>Need by: {formatDate(order.need_by_date)}</p>
+                            <p>Priority: {order.priority || 'NORMAL'}</p>
+                            <p>Source: {order.source_type || 'MANUAL'}</p>
+                            {order.reorder_from_order_code ? (
+                              <p className="col-span-2">Reorder from: {order.reorder_from_order_code}</p>
+                            ) : null}
+                          </div>
                         </li>
                       );
                     })}
@@ -1140,8 +1562,17 @@ const SupplyOrderPage = () => {
                         <span>Created: {formatDateTime(selectedOrder.created_at)}</span>
                       </div>
                       <div className="mt-2 text-sm text-gray-600 space-y-1">
+                        <p>Order date: {formatDate(selectedOrder.order_date || selectedOrder.created_at)}</p>
+                        <p>Need by date: {formatDate(selectedOrder.need_by_date)}</p>
+                        <p>Priority: {selectedOrder.priority || 'NORMAL'}</p>
+                        <p>Source type: {selectedOrder.source_type || 'MANUAL'}</p>
+                        <p>Reorder from: {selectedOrder.reorder_from_order_code || '-'}</p>
+                        <p>Submitted by: {selectedOrder.submitted_by_username || selectedOrder.submitted_by || '-'}</p>
+                        <p>Submitted at: {formatDateTime(selectedOrder.submitted_at)}</p>
                         <p>Approved by: {selectedOrder.approved_by_username || '-'}</p>
-                        <p>Approved date: {formatDateTime(selectedOrder.approved_date)}</p>
+                        <p>Approved at: {formatDateTime(selectedOrder.approved_at)}</p>
+                        <p>First delivery at: {formatDateTime(selectedOrder.first_delivery_at)}</p>
+                        <p>Completed at: {formatDateTime(selectedOrder.completed_at)}</p>
                         <p>Note: {selectedOrder.note || '-'}</p>
                         {selectedOrder.status === 'Closed' && (
                           <>
@@ -1176,6 +1607,16 @@ const SupplyOrderPage = () => {
                         </button>
                       )}
 
+                      {canReorder && (
+                        <button
+                          onClick={openReorderModal}
+                          className="px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 flex items-center gap-2"
+                        >
+                          <PlusIcon className="w-4 h-4" />
+                          Reorder
+                        </button>
+                      )}
+
                       {canApprove && (
                         <button
                           onClick={openApproveModal}
@@ -1197,6 +1638,9 @@ const SupplyOrderPage = () => {
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Approved</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Delivered</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Need By</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Delivery</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shortage Reason</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
@@ -1210,7 +1654,14 @@ const SupplyOrderPage = () => {
                             (item.remaining_qty || 0) > 0;
 
                           return (
-                            <tr key={item.supply_order_item_id}>
+                            <tr
+                              key={item.supply_order_item_id}
+                              className={
+                                highlightedOrderItemId === item.supply_order_item_id
+                                  ? 'bg-amber-50 ring-1 ring-inset ring-amber-300'
+                                  : ''
+                              }
+                            >
                               <td className="px-4 py-3 text-sm text-gray-900">
                                 <div className="font-semibold">{formatProductWithUnit(item.product_name, item.unit)}</div>
                                 <div className="text-xs text-gray-500">{item.product_code || '-'}</div>
@@ -1221,6 +1672,9 @@ const SupplyOrderPage = () => {
                               <td className="px-4 py-3 text-sm text-right font-semibold">
                                 {Math.max(item.remaining_qty || 0, 0)}
                               </td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.need_by_date_item)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{formatDate(item.expected_delivery_date)}</td>
+                              <td className="px-4 py-3 text-sm text-gray-700">{item.shortage_reason || '-'}</td>
                               <td className="px-4 py-3 text-sm">
                                 <span
                                   className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -1262,11 +1716,250 @@ const SupplyOrderPage = () => {
         </>
       )}
 
+      {activeTab === 'demand-board' && (isAdmin || isCentralStaff) && (
+        <>
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[240px]">
+              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearch(e.target.value);
+                }}
+                placeholder="Search by code, location, requester..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setPage(1);
+                setStatusFilter(e.target.value as 'all' | SupplyOrderStatus);
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              {ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status === 'all' ? 'All Status' : status}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={locationFilter}
+              onChange={(e) => {
+                setPage(1);
+                const value = e.target.value;
+                setLocationFilter(value === 'all' ? 'all' : parseInt(value, 10));
+              }}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">All Stores</option>
+              {locations.map((loc) => (
+                <option key={loc.location_id} value={loc.location_id}>
+                  {loc.location_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-10 gap-4 min-h-[520px]">
+            <div className="xl:col-span-4 bg-white rounded-lg shadow-md border border-gray-100 flex flex-col overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Ingredients</h2>
+                <span className="text-xs text-gray-500">{groupedDemandRows.length}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {groupedDemandLoading ? (
+                  <div className="p-4 text-sm text-gray-500">Building grouped demand...</div>
+                ) : groupedDemandRows.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">No grouped demand for current filters.</div>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {groupedDemandRows.map((row) => {
+                      const active = selectedDemandRow?.productId === row.productId;
+                      return (
+                        <li
+                          key={row.productId}
+                          onClick={() => {
+                            setSelectedDemandRow(row);
+                            setSelectedDemandStore(null);
+                          }}
+                          className={`px-4 py-3 cursor-pointer transition-colors ${
+                            active ? 'bg-blue-50 border-l-4 border-blue-500' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <p className="font-semibold text-gray-900">{formatProductWithUnit(row.productName, row.unit)}</p>
+                          <p className="text-xs text-gray-500 mt-1">{row.productCode}</p>
+                          <div className="mt-1 grid grid-cols-2 gap-x-2 text-xs text-gray-600">
+                            <p>Need by: {formatDate(row.earliestNeedByDate)}</p>
+                            <p>Remaining: <span className="font-semibold text-indigo-700">{row.remainingQty}</span></p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="xl:col-span-6 bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {selectedDemandRow
+                    ? `Stores Ordering ${selectedDemandRow.productCode}`
+                    : 'Stores Ordering'}
+                </h2>
+              </div>
+
+              {!selectedDemandRow ? (
+                <div className="p-6 text-sm text-gray-500">Select an ingredient on the left to view stores.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Store</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Order Lines</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requested</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Approved</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Delivered</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Detail</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {selectedDemandRow.stores.map((store) => (
+                        <tr key={store.storeKey}>
+                          <td className="px-4 py-2 font-medium text-gray-800">{store.storeName}</td>
+                          <td className="px-4 py-2 text-right text-gray-700">{store.orderCount}</td>
+                          <td className="px-4 py-2 text-right text-gray-700">{store.requestedQty}</td>
+                          <td className="px-4 py-2 text-right text-gray-700">{store.approvedQty}</td>
+                          <td className="px-4 py-2 text-right text-gray-700">{store.deliveredQty}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-indigo-700">{store.remainingQty}</td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => setSelectedDemandStore(store)}
+                              className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-blue-700 hover:bg-blue-50"
+                              title="View store demand detail"
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </>
+      )}
+
+      {selectedDemandStore && selectedDemandRow && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Store Demand Detail</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedDemandStore.storeName} - {formatProductWithUnit(selectedDemandRow.productName, selectedDemandRow.unit)} ({selectedDemandRow.productCode})
+                </p>
+              </div>
+              <button onClick={() => setSelectedDemandStore(null)} className="text-gray-400 hover:text-gray-600">
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">Store</p>
+                  <p className="font-semibold text-gray-900">{selectedDemandStore.storeName}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">Requested</p>
+                  <p className="font-semibold text-gray-900">{selectedDemandStore.requestedQty}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">Approved</p>
+                  <p className="font-semibold text-gray-900">{selectedDemandStore.approvedQty}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">Delivered</p>
+                  <p className="font-semibold text-gray-900">{selectedDemandStore.deliveredQty}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <p className="text-xs text-gray-500">Remaining</p>
+                  <p className="font-semibold text-indigo-700">{selectedDemandStore.remainingQty}</p>
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                <table className="min-w-[1200px] w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Supply Order</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Order Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Need By</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requested</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Approved</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Delivered</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Remaining</th>
+                      <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Open</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {selectedDemandStore.orders.map((orderEntry) => (
+                      <tr key={`${orderEntry.orderId}-${orderEntry.itemId}`}>
+                        <td className="px-4 py-2 text-gray-800 font-medium">{orderEntry.orderCode}</td>
+                        <td className="px-4 py-2 text-gray-700">{formatDate(orderEntry.orderDate)}</td>
+                        <td className="px-4 py-2 text-gray-700">{orderEntry.status}</td>
+                        <td className="px-4 py-2 text-gray-700">{orderEntry.priority || 'NORMAL'}</td>
+                        <td className="px-4 py-2 text-gray-700">{formatDate(orderEntry.needByDate)}</td>
+                        <td className="px-4 py-2 text-right text-gray-700">{orderEntry.requestedQty}</td>
+                        <td className="px-4 py-2 text-right text-gray-700">{orderEntry.approvedQty}</td>
+                        <td className="px-4 py-2 text-right text-gray-700">{orderEntry.deliveredQty}</td>
+                        <td className="px-4 py-2 text-right font-semibold text-indigo-700">{orderEntry.remainingQty}</td>
+                        <td className="px-4 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => void openOrderFromDemand(orderEntry.orderId, orderEntry.itemId)}
+                            className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-blue-700 hover:bg-blue-50"
+                            title="Open in Supply Order tab"
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">Create Supply Order</h2>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {createSourceType === 'REORDER' ? 'Reorder Supply Order' : 'Create Supply Order'}
+                </h2>
+                {createSourceType === 'REORDER' && reorderFromOrderCode ? (
+                  <p className="text-sm text-violet-700 mt-1">Based on: {reorderFromOrderCode}</p>
+                ) : null}
+              </div>
               <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
                 <XMarkIcon className="w-6 h-6" />
               </button>
@@ -1320,6 +2013,63 @@ const SupplyOrderPage = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Order Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={createOrderDate}
+                    onChange={(e) => setCreateOrderDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Need By Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={createNeedByDate}
+                    min={createOrderDate || undefined}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCreateNeedByDate(value);
+                      setCreateItems((prev) =>
+                        prev.map((item) => ({
+                          ...item,
+                          need_by_date_item: value,
+                        }))
+                      );
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={createPriority}
+                    onChange={(e) => setCreatePriority(e.target.value as SupplyOrderPriority)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Type</label>
+                  <div className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm font-semibold text-gray-700">
+                    {createSourceType}
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-900">Supply Order Items</h3>
@@ -1333,8 +2083,8 @@ const SupplyOrderPage = () => {
                 </div>
 
                 {createItems.map((row, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-end bg-gray-50 p-3 rounded-lg">
-                    <div className="col-span-7">
+                  <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-lg">
+                    <div className="md:col-span-6">
                       <label className="block text-xs text-gray-600 mb-1">Product</label>
                       <select
                         value={row.product_id ?? ''}
@@ -1354,7 +2104,7 @@ const SupplyOrderPage = () => {
                         ))}
                       </select>
                     </div>
-                    <div className="col-span-3">
+                    <div className="md:col-span-2">
                       <label className="block text-xs text-gray-600 mb-1">Requested Qty</label>
                       <input
                         type="number"
@@ -1369,7 +2119,24 @@ const SupplyOrderPage = () => {
                         required
                       />
                     </div>
-                    <div className="col-span-2">
+                    <div className="md:col-span-3">
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Need By Item <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={row.need_by_date_item}
+                        min={createOrderDate || undefined}
+                        onChange={(e) =>
+                          updateCreateItem(index, {
+                            need_by_date_item: e.target.value,
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        required
+                      />
+                    </div>
+                    <div className="md:col-span-1">
                       <button
                         type="button"
                         onClick={() => removeCreateItem(index)}
@@ -1422,8 +2189,11 @@ const SupplyOrderPage = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Need By</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Expected Delivery</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Requested</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Approve Qty</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Shortage Reason</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Projected Available</th>
                     </tr>
                   </thead>
@@ -1431,6 +2201,8 @@ const SupplyOrderPage = () => {
                     {approveOrder.items.map((item) => (
                       (() => {
                         const approvedQty = approveQtyMap[item.supply_order_item_id] ?? 0;
+                        const shortageReason = approveShortageReasonMap[item.supply_order_item_id] || '';
+                        const requiresReason = approvedQty < item.requested_qty;
                         const inventoryAvailable = approveInventoryMap[item.product_id] ?? 0;
                         const reservedProduct = approveReserveMap[item.product_id] ?? 0;
                         const projectedAvailable = inventoryAvailable - reservedProduct - approvedQty;
@@ -1440,6 +2212,20 @@ const SupplyOrderPage = () => {
                         <td className="px-4 py-2 text-sm">
                           <div className="font-semibold">{formatProductWithUnit(item.product_name, item.unit)}</div>
                           <div className="text-xs text-gray-500">{item.product_code}</div>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700">{formatDate(item.need_by_date_item)}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <input
+                            type="date"
+                            value={approveExpectedDeliveryMap[item.supply_order_item_id] || ''}
+                            onChange={(e) =>
+                              setApproveExpectedDeliveryMap((prev) => ({
+                                ...prev,
+                                [item.supply_order_item_id]: e.target.value,
+                              }))
+                            }
+                            className="w-56 px-2 py-1 border border-gray-300 rounded"
+                          />
                         </td>
                         <td className="px-4 py-2 text-sm text-right">{item.requested_qty}</td>
                         <td className="px-4 py-2 text-sm text-right">
@@ -1457,6 +2243,29 @@ const SupplyOrderPage = () => {
                             }}
                             className="w-32 px-2 py-1 border border-gray-300 rounded text-right"
                           />
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          <select
+                            value={shortageReason}
+                            onChange={(e) =>
+                              setApproveShortageReasonMap((prev) => ({
+                                ...prev,
+                                [item.supply_order_item_id]: e.target.value as SupplyOrderShortageReason | '',
+                              }))
+                            }
+                            disabled={!requiresReason}
+                            className="w-full px-2 py-1 border border-gray-300 rounded disabled:bg-gray-100"
+                          >
+                            <option value="">Select reason</option>
+                            {SHORTAGE_REASON_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          {!requiresReason ? (
+                            <div className="mt-1 text-[11px] text-gray-500">Not required when fully approved</div>
+                          ) : null}
                         </td>
                         <td className="px-4 py-2 text-sm text-right">
                           <span className={projectedAvailable < 0 ? 'font-semibold text-red-600' : 'text-gray-700'}>
@@ -1526,6 +2335,8 @@ const SupplyOrderPage = () => {
                 <p><span className="text-gray-500">Approved:</span> {deliveryDraft.item.approved_qty}</p>
                 <p><span className="text-gray-500">Delivered:</span> {deliveryDraft.item.delivered_qty}</p>
                 <p><span className="text-gray-500">Remaining:</span> <span className="font-semibold text-indigo-700">{deliveryDraft.item.remaining_qty || 0}</span></p>
+                <p><span className="text-gray-500">Need by item:</span> {formatDate(deliveryDraft.item.need_by_date_item)}</p>
+                <p><span className="text-gray-500">Expected delivery:</span> {formatDateTime(deliveryDraft.item.expected_delivery_date)}</p>
                 <p><span className="text-gray-500">Reserve Rule Mode:</span> <span className="font-semibold text-slate-700">{deliveryRuleMode}</span></p>
                 <p><span className="text-gray-500">Reserve Remaining:</span> {deliveryReserveRemaining}</p>
                 <p><span className="text-gray-500">Allocated Remaining:</span> {deliveryAllocatedTotal}</p>

@@ -87,6 +87,7 @@ const menuSections: MenuSection[] = [
         path: '/reserve',
         icon: ClockIcon,
         roles: [1, 2, 3],
+        hidden: (user) => user.role_id === 3,
       },
       {
         name: 'Batch Transfer',
@@ -252,6 +253,7 @@ const Sidebar = () => {
                   <li key={item.path}>
                     <Link
                       to={item.path}
+                      state={item.path === '/supply-order' ? { openTab: 'demand-board' } : undefined}
                       className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
                         isActive
                           ? 'bg-gray-100 text-gray-900 ring-1 ring-gray-200 shadow-sm'

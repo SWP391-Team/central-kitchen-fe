@@ -22,11 +22,13 @@ interface SupplyOrderListResponse {
 }
 
 const normalizeOrder = (order: SupplyOrder): SupplyOrder => {
+  const approvedAt = (order as any).approved_at ?? (order as any).approved_date ?? null;
   const closeReason = order.close_reason ?? order.closed_reason ?? null;
   const closeNote = order.close_note ?? order.closed_note ?? null;
 
   return {
     ...order,
+    approved_at: approvedAt,
     close_reason: closeReason,
     close_note: closeNote,
   };

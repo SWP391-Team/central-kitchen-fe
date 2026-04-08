@@ -8,6 +8,13 @@ export type SupplyOrderStatus =
   | 'Closed';
 
 export type SupplyOrderItemStatus = 'Draft' | 'Pending' | 'Approved' | 'Rejected';
+export type SupplyOrderPriority = 'LOW' | 'NORMAL' | 'URGENT';
+export type SupplyOrderSourceType = 'MANUAL' | 'REORDER';
+export type SupplyOrderShortageReason =
+  | 'OUT_OF_STOCK'
+  | 'LOW_STOCK'
+  | 'QUALITY_ISSUE'
+  | 'OTHER';
 
 export interface SupplyOrder {
   supply_order_id: number;
@@ -18,7 +25,17 @@ export interface SupplyOrder {
   requested_by_username?: string;
   requested_by_user_code?: string;
   approved_by: number | null;
-  approved_date: string | null;
+  approved_at: string | null;
+  first_delivery_at?: string | null;
+  order_date?: string | null;
+  need_by_date?: string | null;
+  submitted_at?: string | null;
+  submitted_by?: number | null;
+  completed_at?: string | null;
+  priority?: SupplyOrderPriority;
+  source_type?: SupplyOrderSourceType;
+  reorder_from_order_id?: number | null;
+  reorder_from_order_code?: string | null;
   note: string | null;
   closed_by?: number | null;
   closed_at?: string | null;
@@ -33,6 +50,7 @@ export interface SupplyOrder {
   location_type?: string;
   created_by_username?: string;
   approved_by_username?: string;
+  submitted_by_username?: string;
   closed_by_username?: string;
   item_count?: number;
 }
@@ -49,6 +67,9 @@ export interface SupplyOrderItem {
   product_code?: string;
   unit?: string;
   remaining_qty?: number;
+  need_by_date_item?: string | null;
+  expected_delivery_date?: string | null;
+  shortage_reason?: SupplyOrderShortageReason | null;
 }
 
 export interface SupplyOrderDetailResponse {
@@ -58,10 +79,17 @@ export interface SupplyOrderDetailResponse {
 
 export interface CreateSupplyOrderRequest {
   requested_by_user_id: number;
+  order_date?: string;
+  need_by_date?: string;
+  priority?: SupplyOrderPriority;
+  source_type?: SupplyOrderSourceType;
+  reorder_from_order_id?: number;
   note?: string;
   items: Array<{
     product_id: number;
     requested_qty: number;
+    need_by_date_item?: string;
+    expected_delivery_date?: string;
   }>;
 }
 
@@ -70,6 +98,8 @@ export interface ApproveSupplyOrderRequest {
   items: Array<{
     supply_order_item_id: number;
     approved_qty: number;
+    expected_delivery_date?: string;
+    shortage_reason?: SupplyOrderShortageReason;
   }>;
 }
 
