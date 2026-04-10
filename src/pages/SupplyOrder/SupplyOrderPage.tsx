@@ -144,6 +144,14 @@ const toDateInputValue = (value?: string | null) => {
   return `${year}-${month}-${day}`;
 };
 
+const getTodayDateInputValue = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const getStatusBadgeClass = (status: string) => {
   const map: Record<string, string> = {
     Draft: 'bg-gray-100 text-gray-700',
@@ -873,6 +881,8 @@ const SupplyOrderPage = () => {
     e.preventDefault();
     if (!approveOrder) return;
 
+    const today = getTodayDateInputValue();
+
     for (const item of approveOrder.items) {
       const qty = approveQtyMap[item.supply_order_item_id] ?? 0;
       if (qty < 0 || qty > item.requested_qty) {
@@ -889,10 +899,10 @@ const SupplyOrderPage = () => {
       }
 
       const expectedDelivery = approveExpectedDeliveryMap[item.supply_order_item_id];
-      if (expectedDelivery && item.need_by_date_item) {
+      if (expectedDelivery) {
         const expectedDate = toDateInputValue(expectedDelivery);
-        if (expectedDate < item.need_by_date_item) {
-          showToast(`Expected delivery for ${item.product_name} must be on or after item need by date`, 'error');
+        if (expectedDate && expectedDate < today) {
+          showToast(`Expected delivery for ${item.product_name} cannot be in the past`, 'error');
           return;
         }
       }
@@ -1921,7 +1931,11 @@ const SupplyOrderPage = () => {
                       <tr key={`${orderEntry.orderId}-${orderEntry.itemId}`}>
                         <td className="px-4 py-2 text-gray-800 font-medium">{orderEntry.orderCode}</td>
                         <td className="px-4 py-2 text-gray-700">{formatDate(orderEntry.orderDate)}</td>
-                        <td className="px-4 py-2 text-gray-700">{orderEntry.status}</td>
+                        <td className="px-4 py-2 text-gray-700">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(orderEntry.status)}`}>
+                            {orderEntry.status}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-gray-700">{orderEntry.priority || 'NORMAL'}</td>
                         <td className="px-4 py-2 text-gray-700">{formatDate(orderEntry.needByDate)}</td>
                         <td className="px-4 py-2 text-right text-gray-700">{orderEntry.requestedQty}</td>
@@ -2218,6 +2232,7 @@ const SupplyOrderPage = () => {
                           <input
                             type="date"
                             value={approveExpectedDeliveryMap[item.supply_order_item_id] || ''}
+                            min={getTodayDateInputValue()}
                             onChange={(e) =>
                               setApproveExpectedDeliveryMap((prev) => ({
                                 ...prev,
